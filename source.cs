@@ -583,7 +583,7 @@ public HamsterViewer()
     exitMenuItem = new ToolStripMenuItem("выйти");
     try
     {
-        string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ani", "icon1.ico");
+        string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "files", "icon1.ico");
         if (File.Exists(iconPath))
         {
             using (var stream = new FileStream(iconPath, FileMode.Open, FileAccess.Read))
@@ -594,7 +594,7 @@ public HamsterViewer()
         else
         {
             string[] possiblePaths = {
-                Path.Combine(Directory.GetCurrentDirectory(), "ani", "icon1.ico"),
+                Path.Combine(Directory.GetCurrentDirectory(), "files", "icon1.ico"),
                 Path.Combine(Directory.GetCurrentDirectory(), "icon1.ico"),
                 "ani/icon1.ico",
                 "icon1.ico"
@@ -620,7 +620,7 @@ public HamsterViewer()
     var linkMenuItem = new ToolStripMenuItem("отправить мне донат");
     try
     {
-        string iconPath2 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ani", "icon_2.ico");
+        string iconPath2 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "files", "icon_2.ico");
         if (File.Exists(iconPath2))
         {
             using (var stream = new FileStream(iconPath2, FileMode.Open, FileAccess.Read))
@@ -631,7 +631,7 @@ public HamsterViewer()
         else
         {
             string[] possiblePaths2 = {
-                Path.Combine(Directory.GetCurrentDirectory(), "ani", "icon_2.ico"),
+                Path.Combine(Directory.GetCurrentDirectory(), "files", "icon_2.ico"),
                 Path.Combine(Directory.GetCurrentDirectory(), "icon_2.ico"),
                 "ani/icon_2.ico",
                 "icon_2.ico"
@@ -923,8 +923,8 @@ private void TextMenuItem_Click(object? sender, EventArgs e)
 private void PreloadAnimations()
 {
     loadedAnimations.Clear();
-    string animsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ani", "anims.txt");
-    string aniFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ani");
+    string animsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "files", "anims.txt");
+    string aniFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "files");
     if (!File.Exists(animsFilePath))
     {
         animsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "anims.txt");
@@ -936,7 +936,7 @@ private void PreloadAnimations()
     }
     if (!Directory.Exists(aniFolderPath))
     {
-        aniFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ani");
+        aniFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "files");
         if (!Directory.Exists(aniFolderPath))
         {
              aniFolderPath = AppDomain.CurrentDomain.BaseDirectory;

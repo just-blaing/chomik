@@ -96,7 +96,6 @@ namespace ChomikViewer
           messageLabel.MouseDown += Form_MouseDown;
           messageLabel.MouseMove += Form_MouseMove;
           messageLabel.MouseUp += Form_MouseUp;
-
           okButton = new Button
           {
               Text = "OK",
@@ -384,7 +383,6 @@ namespace ChomikViewer
                   targetColor.G,
                   targetColor.B
               );
-
               using (GraphicsPath path = RoundedRect(rc, radius))
               using (SolidBrush highlightBrush = new SolidBrush(blendColor))
               {
@@ -401,9 +399,7 @@ namespace ChomikViewer
           {
               textColor = Color.Gray;
           }
-
           Font textFont = e.TextFont ?? SystemFonts.DefaultFont;
-
           using (SolidBrush textBrush = new SolidBrush(textColor))
           using (StringFormat sf = new StringFormat())
           {
@@ -453,7 +449,6 @@ namespace ChomikViewer
                   sf.Trimming = StringTrimming.EllipsisWord;
                   sf.FormatFlags |= StringFormatFlags.NoWrap;
               }
-
               e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
               e.Graphics.DrawString(e.Text, textFont, textBrush, e.TextRectangle, sf);
           }
@@ -490,13 +485,11 @@ namespace ChomikViewer
       {
           int d = radius * 2;
           GraphicsPath path = new GraphicsPath();
-
           path.AddArc(bounds.Left, bounds.Top, d, d, 180, 90);
           path.AddArc(bounds.Right - d, bounds.Top, d, d, 270, 90);
           path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
           path.AddArc(bounds.Left, bounds.Bottom - d, d, d, 90, 90);
           path.CloseFigure();
-
           return path;
       }
   }
@@ -531,17 +524,15 @@ namespace ChomikViewer
           TopMost = true;
           DoubleBuffered = true;
           SelectedApp = string.Empty;
-
           var titleLabel = new Label
           {
-              Text = "Выберите приложение:",
+              Text = "выберите приложение:",
               ForeColor = textColor,
               BackColor = Color.Transparent,
               TextAlign = ContentAlignment.MiddleLeft,
               AutoSize = true,
               Location = new Point(20, 20)
           };
-
           appListBox = new ListBox
           {
               BackColor = Color.FromArgb(30, 30, 30),
@@ -550,17 +541,14 @@ namespace ChomikViewer
               Location = new Point(20, 50),
               Size = new Size(260, 180)
           };
-
           foreach (var app in apps)
           {
               appListBox.Items.Add(app);
           }
-
           if (appListBox.Items.Count > 0)
           {
               appListBox.SelectedIndex = 0;
           }
-
           selectButton = new Button
           {
               Text = "Выбрать",
@@ -569,12 +557,10 @@ namespace ChomikViewer
               ForeColor = buttonForeColor,
               FlatStyle = FlatStyle.Flat
           };
-
           selectButton.FlatAppearance.BorderSize = 0;
           selectButton.FlatAppearance.MouseDownBackColor = Color.FromArgb(60, 60, 60);
           selectButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(50, 50, 50);
           selectButton.Click += SelectButton_Click;
-
           cancelButton = new Button
           {
               Text = "Отмена",
@@ -584,31 +570,25 @@ namespace ChomikViewer
               ForeColor = buttonForeColor,
               FlatStyle = FlatStyle.Flat
           };
-
           cancelButton.FlatAppearance.BorderSize = 0;
           cancelButton.FlatAppearance.MouseDownBackColor = Color.FromArgb(60, 60, 60);
           cancelButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(50, 50, 50);
-
           buttonPanel = new Panel
           {
               Dock = DockStyle.Bottom,
               Height = 40,
               BackColor = backgroundColor
           };
-
           buttonPanel.Controls.Add(selectButton);
           buttonPanel.Controls.Add(cancelButton);
           buttonPanel.ControlAdded += (s, e) => ArrangeButtons();
           buttonPanel.Resize += (s, e) => ArrangeButtons();
-
           Controls.Add(titleLabel);
           Controls.Add(appListBox);
           Controls.Add(buttonPanel);
-
           MouseDown += Form_MouseDown;
           MouseMove += Form_MouseMove;
           MouseUp += Form_MouseUp;
-
           titleLabel.MouseDown += Form_MouseDown;
           titleLabel.MouseMove += Form_MouseMove;
           titleLabel.MouseUp += Form_MouseUp;
@@ -619,7 +599,6 @@ namespace ChomikViewer
           int totalButtonWidth = selectButton.Width + cancelButton.Width + 10;
           int startX = (buttonPanel.Width - totalButtonWidth) / 2;
           int buttonY = (buttonPanel.Height - selectButton.Height) / 2;
-
           selectButton.Location = new Point(startX, buttonY);
           cancelButton.Location = new Point(startX + selectButton.Width + 10, buttonY);
       }
@@ -651,7 +630,6 @@ namespace ChomikViewer
       {
           e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
           Rectangle bounds = new Rectangle(0, 0, Width, Height);
-
           using (GraphicsPath path = RoundedRect(bounds, cornerRadius))
           using (SolidBrush backgroundBrush = new SolidBrush(backgroundColor))
           using (Pen borderPen = new Pen(borderColor, 2))
@@ -665,13 +643,11 @@ namespace ChomikViewer
       {
           int d = radius * 2;
           GraphicsPath path = new GraphicsPath();
-
           path.AddArc(bounds.Left, bounds.Top, d, d, 180, 90);
           path.AddArc(bounds.Right - d, bounds.Top, d, d, 270, 90);
           path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
           path.AddArc(bounds.Left, bounds.Bottom - d, d, d, 90, 90);
           path.CloseFigure();
-
           return path;
       }
 
@@ -722,12 +698,10 @@ namespace ChomikViewer
       private Button okButton;
       private Button cancelButton;
       private Panel buttonPanel;
-
       private Label whitelistLabel;
       private ListBox whitelistBox;
       private Button addAppButton;
       private Button removeAppButton;
-
       public double IdleDelaySeconds { get; private set; }
       public bool IsMusicListeningEnabled { get; private set; }
       public List<string> MusicWhitelist { get; private set; }
@@ -741,11 +715,9 @@ namespace ChomikViewer
           Size = new Size(350, 350);
           TopMost = true;
           DoubleBuffered = true;
-
           IdleDelaySeconds = initialIdleDelay;
           IsMusicListeningEnabled = initialMusicListeningEnabled;
           MusicWhitelist = new List<string>(initialMusicWhitelist);
-
           idleDelayLabel = new Label
           {
               Text = "задержка перед айдлом (сек):",
@@ -755,7 +727,6 @@ namespace ChomikViewer
               AutoSize = true,
               Location = new Point(20, 30)
           };
-
           idleDelayTrackBar = new TrackBar
           {
               Minimum = 1,
@@ -769,9 +740,7 @@ namespace ChomikViewer
               BackColor = backgroundColor,
               TickStyle = TickStyle.None
           };
-
           idleDelayTrackBar.ValueChanged += IdleDelayTrackBar_ValueChanged;
-
           idleDelayValueLabel = new Label
           {
               Text = (initialIdleDelay).ToString("0.0"),
@@ -781,7 +750,6 @@ namespace ChomikViewer
               AutoSize = true,
               Location = new Point(idleDelayTrackBar.Right + 10, 60)
           };
-
           musicListeningCheckBox = new CheckBox
           {
               Text = "слушать музыку",
@@ -792,13 +760,11 @@ namespace ChomikViewer
               Checked = initialMusicListeningEnabled,
               FlatStyle = FlatStyle.Flat
           };
-
           musicListeningCheckBox.FlatAppearance.BorderSize = 1;
           musicListeningCheckBox.FlatAppearance.BorderColor = textColor;
           musicListeningCheckBox.FlatAppearance.CheckedBackColor = Color.FromArgb(148, 0, 211);
           musicListeningCheckBox.FlatAppearance.MouseDownBackColor = Color.FromArgb(60, 60, 60);
           musicListeningCheckBox.FlatAppearance.MouseOverBackColor = Color.FromArgb(50, 50, 50);
-
           whitelistLabel = new Label
           {
               Text = "белый список приложений:",
@@ -808,7 +774,6 @@ namespace ChomikViewer
               AutoSize = true,
               Location = new Point(20, 140)
           };
-
           whitelistBox = new ListBox
           {
               BackColor = Color.FromArgb(30, 30, 30),
@@ -818,12 +783,10 @@ namespace ChomikViewer
               Size = new Size(310, 100),
               SelectionMode = SelectionMode.One
           };
-
           foreach (var app in MusicWhitelist)
           {
               whitelistBox.Items.Add(app);
           }
-
           addAppButton = new Button
           {
               Text = "+",
@@ -833,12 +796,10 @@ namespace ChomikViewer
               ForeColor = buttonForeColor,
               FlatStyle = FlatStyle.Flat
           };
-
           addAppButton.FlatAppearance.BorderSize = 0;
           addAppButton.FlatAppearance.MouseDownBackColor = Color.FromArgb(60, 60, 60);
           addAppButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(50, 50, 50);
           addAppButton.Click += AddAppButton_Click;
-
           removeAppButton = new Button
           {
               Text = "-",
@@ -848,27 +809,23 @@ namespace ChomikViewer
               ForeColor = buttonForeColor,
               FlatStyle = FlatStyle.Flat
           };
-
           removeAppButton.FlatAppearance.BorderSize = 0;
           removeAppButton.FlatAppearance.MouseDownBackColor = Color.FromArgb(60, 60, 60);
           removeAppButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(50, 50, 50);
           removeAppButton.Click += RemoveAppButton_Click;
-
           okButton = new Button
           {
-              Text = "OK",
+              Text = "ок",
               DialogResult = DialogResult.OK,
               Size = new Size(80, 30),
               BackColor = buttonBackColor,
               ForeColor = buttonForeColor,
               FlatStyle = FlatStyle.Flat
           };
-
           okButton.FlatAppearance.BorderSize = 0;
           okButton.FlatAppearance.MouseDownBackColor = Color.FromArgb(60, 60, 60);
           okButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(50, 50, 50);
           okButton.Click += OkButton_Click;
-
           cancelButton = new Button
           {
               Text = "отмена",
@@ -878,21 +835,17 @@ namespace ChomikViewer
               ForeColor = buttonForeColor,
               FlatStyle = FlatStyle.Flat
           };
-
           cancelButton.FlatAppearance.BorderSize = 0;
           cancelButton.FlatAppearance.MouseDownBackColor = Color.FromArgb(60, 60, 60);
           cancelButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(50, 50, 50);
-
           buttonPanel = new Panel
           {
               Dock = DockStyle.Bottom,
               Height = 40,
               BackColor = backgroundColor
           };
-
           buttonPanel.Controls.Add(okButton);
           buttonPanel.Controls.Add(cancelButton);
-
           buttonPanel.ControlAdded += (s, e) =>
           {
               if (e.Control is Button btn)
@@ -901,7 +854,6 @@ namespace ChomikViewer
               }
           };
           buttonPanel.Resize += (s, e) => ArrangeButtons();
-
           Controls.Add(idleDelayLabel);
           Controls.Add(idleDelayTrackBar);
           Controls.Add(idleDelayValueLabel);
@@ -911,25 +863,19 @@ namespace ChomikViewer
           Controls.Add(addAppButton);
           Controls.Add(removeAppButton);
           Controls.Add(buttonPanel);
-
           Padding = new Padding(1);
-
           MouseDown += Form_MouseDown;
           MouseMove += Form_MouseMove;
           MouseUp += Form_MouseUp;
-
           idleDelayLabel.MouseDown += Form_MouseDown;
           idleDelayLabel.MouseMove += Form_MouseMove;
           idleDelayLabel.MouseUp += Form_MouseUp;
-
           idleDelayValueLabel.MouseDown += Form_MouseDown;
           idleDelayValueLabel.MouseMove += Form_MouseMove;
           idleDelayValueLabel.MouseUp += Form_MouseUp;
-
           musicListeningCheckBox.MouseDown += Form_MouseDown;
           musicListeningCheckBox.MouseMove += Form_MouseMove;
           musicListeningCheckBox.MouseUp += Form_MouseUp;
-
           whitelistLabel.MouseDown += Form_MouseDown;
           whitelistLabel.MouseMove += Form_MouseMove;
           whitelistLabel.MouseUp += Form_MouseUp;
@@ -941,7 +887,7 @@ namespace ChomikViewer
 
           if (runningApps.Count == 0)
           {
-              MessageBox.Show("Не найдены приложения, воспроизводящие звук", "Информация", MessageBoxButtons.OK);
+              MessageBox.Show("не найдены приложения, воспроизводящие звук. похоже, вы не любитель музыки", "ошибка", MessageBoxButtons.OK);
               return;
           }
 
@@ -987,7 +933,7 @@ namespace ChomikViewer
           }
           catch (Exception ex)
           {
-              Debug.WriteLine($"Ошибка при получении списка приложений: {ex.Message}");
+              Debug.WriteLine($"ошибка при получении списка приложений: {ex.Message}");
           }
 
           return appsWithSound.Distinct().ToList();
@@ -998,7 +944,6 @@ namespace ChomikViewer
           int totalButtonWidth = okButton.Width + cancelButton.Width + 10;
           int startX = (buttonPanel.Width - totalButtonWidth) / 2;
           int buttonY = (buttonPanel.Height - okButton.Height) / 2;
-
           okButton.Location = new Point(startX, buttonY);
           cancelButton.Location = new Point(startX + okButton.Width + 10, buttonY);
       }
@@ -1040,7 +985,6 @@ namespace ChomikViewer
       {
           e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
           Rectangle bounds = new Rectangle(0, 0, Width, Height);
-
           using (GraphicsPath path = RoundedRect(bounds, cornerRadius))
           using (SolidBrush backgroundBrush = new SolidBrush(backgroundColor))
           using (Pen borderPen = new Pen(borderColor, 2))
@@ -1054,7 +998,6 @@ namespace ChomikViewer
       {
           int d = radius * 2;
           GraphicsPath path = new GraphicsPath();
-
           path.AddArc(bounds.Left, bounds.Top, d, d, 180, 90);
           path.AddArc(bounds.Right - d, bounds.Top, d, d, 270, 90);
           path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
@@ -1241,23 +1184,18 @@ namespace ChomikViewer
           ShowInTaskbar = false;
           StartPosition = FormStartPosition.CenterScreen;
           AllowDrop = true;
-
           this.MouseDown += Form_MouseDown;
           this.MouseMove += Form_MouseMove;
           this.MouseUp += Form_MouseUp;
           this.DragEnter += HamsterViewer_DragEnter;
           this.DragDrop += HamsterViewer_DragDrop;
           this.DragLeave += HamsterViewer_DragLeave;
-
           LoadSettings();
-
           contextMenu = new ContextMenuStrip();
           contextMenu.ShowImageMargin = true;
           contextMenu.ShowCheckMargin = false;
           contextMenu.ImageScalingSize = new Size(16, 16);
-
           var customRenderer = new AnimatedMenuRenderer();
-
           exitMenuItem = new ToolStripMenuItem("выйти");
           try
           {
@@ -1295,7 +1233,6 @@ namespace ChomikViewer
               Debug.WriteLine(ex.Message + "\n" + ex.StackTrace);
           }
           exitMenuItem.Click += ExitMenuItem_Click;
-
           var linkMenuItem = new ToolStripMenuItem("отправить мне донат");
           try
           {
@@ -1386,7 +1323,6 @@ namespace ChomikViewer
               Debug.WriteLine($"{ex.Message}\n{ex.StackTrace}");
           }
           settingsMenuItem.Click += SettingsMenuItem_Click;
-
           screenshotMenuItem = new ToolStripMenuItem("заскриншотить экран");
           try
           {
@@ -1423,15 +1359,13 @@ namespace ChomikViewer
           {
               Debug.WriteLine($"{ex.Message}\n{ex.StackTrace}");
           }
+
           screenshotMenuItem.Click += ScreenshotMenuItem_Click;
-
           menuSeparator = new ToolStripSeparator();
-
           textMenuItem = new ToolStripMenuItem("chomik v 1.2");
           textMenuItem.Enabled = true;
           textMenuItem.Click += TextMenuItem_Click;
           customRenderer.ItemsToExcludeFromHighlight.Add(textMenuItem);
-
           contextMenu.Renderer = customRenderer;
           contextMenu.BackColor = Color.Black;
           contextMenu.Items.Add(screenshotMenuItem);
@@ -1440,16 +1374,13 @@ namespace ChomikViewer
           contextMenu.Items.Add(settingsMenuItem);
           contextMenu.Items.Add(menuSeparator);
           contextMenu.Items.Add(textMenuItem);
-
           this.ContextMenuStrip = contextMenu;
-
           PopulateUninterruptibleAnimations();
 
           try
           {
               PreloadAnimations();
               LoadInitialAnimation();
-
               animationTimer = new System.Windows.Forms.Timer();
               animationTimer.Tick += AnimationTimer_Tick;
 
@@ -1463,6 +1394,7 @@ namespace ChomikViewer
               musicCheckTimer = new System.Windows.Forms.Timer();
               musicCheckTimer.Interval = 500;
               musicCheckTimer.Tick += MusicCheckTimer_Tick;
+
               if (isMusicListeningEnabled)
               {
                   musicCheckTimer.Start();
@@ -1473,21 +1405,18 @@ namespace ChomikViewer
               typingCheckTimer.Interval = 100;
               typingCheckTimer.Tick += TypingCheckTimer_Tick;
               typingCheckTimer.Start();
-
               idleDelayTimer = new System.Windows.Forms.Timer();
               idleDelayTimer.Tick += IdleDelayTimer_Tick;
-
               afkCheckTimer = new System.Windows.Forms.Timer();
               afkCheckTimer.Interval = 10000;
               afkCheckTimer.Tick += AfkCheckTimer_Tick;
               afkCheckTimer.Start();
-
               _proc = HookCallback;
               _hookID = SetHook(_proc);
           }
           catch (FileNotFoundException ex)
           {
-              MessageBox.Show($"файл ненайдн {ex.Message}", "отвал", MessageBoxButtons.OK, MessageBoxIcon.Error);
+              MessageBox.Show($"файл ненайден: {ex.Message}", "отвал", MessageBoxButtons.OK, MessageBoxIcon.Error);
               Application.Exit();
           }
           catch (Exception ex)
@@ -1503,7 +1432,6 @@ namespace ChomikViewer
           {
               idleDelaySeconds = Properties.Settings.Default.IdleDelaySeconds;
               isMusicListeningEnabled = Properties.Settings.Default.IsMusicListeningEnabled;
-
               musicWhitelist.Clear();
               if (Properties.Settings.Default.MusicWhitelist != null)
               {
@@ -1532,9 +1460,7 @@ namespace ChomikViewer
           {
               Properties.Settings.Default.IdleDelaySeconds = idleDelaySeconds;
               Properties.Settings.Default.IsMusicListeningEnabled = isMusicListeningEnabled;
-
               Properties.Settings.Default.MusicWhitelist = string.Join(";", musicWhitelist);
-
               Properties.Settings.Default.Save();
           }
           catch (Exception ex)
@@ -1581,6 +1507,7 @@ namespace ChomikViewer
       private void UpdateUserActivity()
       {
           lastUserActivityTime = DateTime.Now;
+
           if (isInAfkMode)
           {
               EndAfkAnimation();
@@ -1595,6 +1522,7 @@ namespace ChomikViewer
           }
 
           TimeSpan inactiveTime = DateTime.Now - lastUserActivityTime;
+
           if (inactiveTime.TotalMinutes >= afkTimeoutMinutes)
           {
               StartAfkAnimation();
@@ -1750,25 +1678,20 @@ namespace ChomikViewer
           {
               hBitmap = bitmap.GetHbitmap(Color.FromArgb(0));
               oldBitmap = SelectObject(memDc, hBitmap);
-
               SizeStruct size = new SizeStruct();
               size.cx = bitmap.Width;
               size.cy = bitmap.Height;
-
               PointStruct pointSource = new PointStruct();
               pointSource.x = 0;
               pointSource.y = 0;
-
               PointStruct topPos = new PointStruct();
               topPos.x = this.Left;
               topPos.y = this.Top;
-
               BLENDFUNCTION blend = new BLENDFUNCTION();
               blend.BlendOp = AC_SRC_OVER;
               blend.BlendFlags = 0;
               blend.SourceConstantAlpha = 255;
               blend.AlphaFormat = AC_SRC_ALPHA;
-
               UpdateLayeredWindow(this.Handle, screenDc, ref topPos, ref size, memDc, ref pointSource, 0, ref blend, ULW_ALPHA);
 
               if (this.ClientSize.Width != bitmap.Width || this.ClientSize.Height != bitmap.Height)
@@ -1805,6 +1728,7 @@ namespace ChomikViewer
       private void TextMenuItem_Click(object? sender, EventArgs e)
       {
           List<AnimationFrame>? musicLoopFrames = null;
+
           if (loadedAnimations.ContainsKey("AnimMusicLoop"))
           {
               musicLoopFrames = loadedAnimations["AnimMusicLoop"];
@@ -1824,10 +1748,8 @@ namespace ChomikViewer
               {
                   idleDelaySeconds = settingsForm.IdleDelaySeconds;
                   isMusicListeningEnabled = settingsForm.IsMusicListeningEnabled;
-
                   musicWhitelist.Clear();
                   musicWhitelist.AddRange(settingsForm.MusicWhitelist);
-
                   SaveSettings();
 
                   if (isMusicListeningEnabled && musicCheckTimer != null && !musicCheckTimer.Enabled)
@@ -1873,10 +1795,8 @@ namespace ChomikViewer
           {
               this.Hide();
               Thread.Sleep(100);
-
               int screenWidth = Screen.PrimaryScreen?.Bounds.Width ?? SystemInformation.VirtualScreen.Width;
               int screenHeight = Screen.PrimaryScreen?.Bounds.Height ?? SystemInformation.VirtualScreen.Height;
-
               using (Bitmap screenshot = new Bitmap(screenWidth, screenHeight))
               {
                   using (Graphics g = Graphics.FromImage(screenshot))
@@ -1907,7 +1827,7 @@ namespace ChomikViewer
               animsFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "anims.txt");
               if (!File.Exists(animsFilePath))
               {
-                  MessageBox.Show("Файл с анимациями (anims.txt) не найден :(", "отвал", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                  MessageBox.Show("файл с анимациями (anims.txt) не найден :(", "отвал", MessageBoxButtons.OK, MessageBoxIcon.Error);
                   Application.Exit();
               }
           }
@@ -1987,7 +1907,7 @@ namespace ChomikViewer
           }
           catch (Exception ex)
           {
-              MessageBox.Show($"Ошибка при загрузке анимаций: {ex.Message} :(", "отвал", MessageBoxButtons.OK, MessageBoxIcon.Error);
+              MessageBox.Show($"ошибка при загрузке анимаций: {ex.Message} :(", "отвал", MessageBoxButtons.OK, MessageBoxIcon.Error);
               Application.Exit();
           }
       }
@@ -2106,7 +2026,6 @@ namespace ChomikViewer
           isInAfkMode = false;
           isScreenshotAnimationActive = false;
           idleDelayTimer?.Stop();
-
           _ = CheckMusicStateAsync().ContinueWith(task =>
           {
               if (isSpotifyMusicPlaying && isMusicListeningEnabled)
@@ -2293,7 +2212,6 @@ namespace ChomikViewer
               AnimationFrame frame = currentAnimationFrames[currentFrameIndex];
               currentFrameBitmap = frame.Image;
               UpdateWindowVisuals(currentFrameBitmap);
-
               int interval = frame.Duration;
               animationTimer.Interval = interval > 0 ? interval : 100;
           }
@@ -2319,7 +2237,6 @@ namespace ChomikViewer
           string previousAnimationName = currentAnimationName;
           string nextAnimation = "AnimMainIdle";
           bool shouldStartIdleDelay = false;
-
           animationTimer?.Stop();
 
           if (previousAnimationName == "AnimScreenshotFinish")
@@ -2648,7 +2565,6 @@ namespace ChomikViewer
           animationTimer?.Stop();
           LoadAnimation(nextAnimation);
           currentAnimationName = nextAnimation;
-
           isRandomIdleSequence = !isInAfkMode && (currentAnimationName.StartsWith("AnimIdleStart") ||
                                currentAnimationName.StartsWith("AnimIdleLoop") ||
                                currentAnimationName.StartsWith("AnimIdleFinish"));
@@ -2662,7 +2578,6 @@ namespace ChomikViewer
           {
               mouseOffset = new Point(-e.X, -e.Y);
               isMouseDown = true;
-
               idleDelayTimer?.Stop();
 
               if (!isInAfkMode && !isSpotifyMusicPlaying && !isTypingAnimationActive && !isDraggingFile && !isScreenshotAnimationActive &&
@@ -2862,19 +2777,14 @@ namespace ChomikViewer
       {
           base.OnFormClosing(e);
           SaveSettings();
-
           animationTimer?.Stop();
           animationTimer?.Dispose();
-
           musicCheckTimer?.Stop();
           musicCheckTimer?.Dispose();
-
           typingCheckTimer?.Stop();
           typingCheckTimer?.Dispose();
-
           idleDelayTimer?.Stop();
           idleDelayTimer?.Dispose();
-
           afkCheckTimer?.Stop();
           afkCheckTimer?.Dispose();
 
@@ -2896,7 +2806,6 @@ namespace ChomikViewer
               }
           }
           loadedAnimations.Clear();
-
           screenshotMenuItem?.Dispose();
           textMenuItem?.Dispose();
           menuSeparator?.Dispose();

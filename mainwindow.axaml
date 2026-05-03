@@ -1,0 +1,41 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="chomik.MainWindow"
+        Title="chomik"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        SystemDecorations="None"
+        Topmost="True"
+        ShowInTaskbar="False"
+        SizeToContent="WidthAndHeight"
+        PointerPressed="on_pointer_pressed"
+        PointerMoved="on_pointer_moved"
+        PointerReleased="on_pointer_released">
+    <Window.ContextMenu>
+        <ContextMenu Background="Black" Foreground="White">
+            <MenuItem Header="заскриншотить экран" Click="on_screenshot_click">
+                <MenuItem.Icon>
+                    <Image x:Name="icon_screenshot" Width="16" Height="16"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="выйти" Click="on_exit_click">
+                <MenuItem.Icon>
+                    <Image x:Name="icon_exit" Width="16" Height="16"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="отправить мне донат" Click="on_donate_click">
+                <MenuItem.Icon>
+                    <Image x:Name="icon_donate" Width="16" Height="16"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="настройки" Click="on_settings_click">
+                <MenuItem.Icon>
+                    <Image x:Name="icon_settings" Width="16" Height="16"/>
+                </MenuItem.Icon>
+            </MenuItem>
+            <Separator Background="#50ffffff"/>
+            <MenuItem Header="chomik v1.3" Click="on_about_click"/>
+        </ContextMenu>
+    </Window.ContextMenu>
+    <Image x:Name="hamster_image" Stretch="None" IsHitTestVisible="False"/>
+</Window>

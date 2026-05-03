@@ -1,0 +1,26 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="chomik.AppSelector"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        SystemDecorations="None"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Width="300" Height="300"
+        PointerPressed="on_pointer_pressed"
+        PointerMoved="on_pointer_moved"
+        PointerReleased="on_pointer_released">
+    <Border CornerRadius="12" Background="Black" BorderBrush="#9400d3" BorderThickness="2">
+        <Grid RowDefinitions="Auto,*,Auto">
+            <TextBlock Text="выберите приложение:" Foreground="White" Margin="20" Grid.Row="0"/>
+            <ListBox x:Name="app_list" Background="#1e1e1e" Foreground="White" Margin="20,0,20,20" Grid.Row="1"/>
+            <Border Grid.Row="2" Background="#282828" Height="40" CornerRadius="0,0,12,12">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                    <Button Content="выбрать" Click="on_select_click" Background="#282828" Foreground="White" BorderThickness="0" CornerRadius="4"/>
+                    <Button Content="отмена" Click="on_cancel_click" Background="#282828" Foreground="White" BorderThickness="0" CornerRadius="4"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="chomik.MessageBox"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        SystemDecorations="None"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Width="300" Height="150"
+        PointerPressed="on_pointer_pressed"
+        PointerMoved="on_pointer_moved"
+        PointerReleased="on_pointer_released">
+    <Border CornerRadius="12" Background="Black" BorderBrush="#9400d3" BorderThickness="2">
+        <Grid RowDefinitions="*,Auto">
+            <Panel Grid.Row="0" ClipToBounds="True">
+                <Image x:Name="anim_image" Stretch="None"
+                       HorizontalAlignment="Right" VerticalAlignment="Bottom"/>
+                <TextBlock x:Name="msg_text" Foreground="White" TextAlignment="Center"
+                           HorizontalAlignment="Center" VerticalAlignment="Top"
+                           Margin="10,14,10,0" FontSize="13"/>
+            </Panel>
+            <Border Grid.Row="1" Background="#282828" Height="40" CornerRadius="0,0,12,12">
+                <Button Content="ok" Click="on_ok_click" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Background="#282828" Foreground="White" BorderThickness="0" CornerRadius="4" Width="80"/>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

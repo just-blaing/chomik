@@ -41,7 +41,7 @@ public partial class MainWindow : Window
     private List<string> one_off_random_idle_animations = new() { "AnimIdle1", "AnimIdle3", "AnimIdle4", "AnimIdle5", "AnimIdle6" };
     private HashSet<string> uninterruptible_animations = new();
     private bool is_screenshot_animation_active = false;
-    private double idle_delay_seconds = 1.0;
+    private double idle_delay_seconds = 3.0;
     private bool is_music_listening_enabled = true;
     private List<string> music_whitelist = new();
     private DateTime last_user_activity_time = DateTime.Now;
@@ -53,6 +53,11 @@ public partial class MainWindow : Window
     private string afk_finish_anim = "AnimIdleFinish3";
     private bool real_eat_files = false;
     private bool permanent_delete = false;
+    private bool is_write_mode_active = false;
+    private string write_bubble_text = "";
+    private BubbleWindow? bubble_window;
+    private DispatcherTimer? bubble_follow_timer;
+    private PixelPoint bubble_target;
     private const int wh_keyboard_ll = 13;
     private const int wm_keydown = 0x0100;
     private const int wm_syskeydown = 0x0104;
@@ -68,6 +73,9 @@ public partial class MainWindow : Window
     }
 
     private delegate IntPtr low_level_keyboard_proc(int n_code, IntPtr w_param, IntPtr l_param);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int n_index);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int n_index, IntPtr new_long);
@@ -96,8 +104,17 @@ public partial class MainWindow : Window
     private delegate IntPtr wnd_proc_delegate(IntPtr hwnd, uint msg, IntPtr w_param, IntPtr l_param);
 
     private const int gwlp_wndproc = -4;
+    private const int gwl_exstyle = -20;
+    private const int ws_ex_toolwindow = 0x00000080;
+    private const int ws_ex_appwindow = 0x00040000;
     private const int wm_nchittest = 0x0084;
     private const int httransparent = -1;
+    private const int rgn_or = 2;
+
+    [DllImport("gdi32.dll")] private static extern IntPtr CreateRectRgn(int x1, int y1, int x2, int y2);
+    [DllImport("gdi32.dll")] private static extern int CombineRgn(IntPtr dest, IntPtr src1, IntPtr src2, int mode);
+    [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr obj);
+    [DllImport("user32.dll")] private static extern int SetWindowRgn(IntPtr hwnd, IntPtr hrgn, bool redraw);
 
     private wnd_proc_delegate? custom_wnd_proc_delegate;
     private IntPtr old_wnd_proc = IntPtr.Zero;
@@ -111,6 +128,9 @@ public partial class MainWindow : Window
     private bool is_typing_animation_active = false;
     private DispatcherTimer? idle_delay_timer;
     private Image hamster_img;
+    private IntPtr x11_display = IntPtr.Zero;
+    private byte[] x11_prev_keys = new byte[32];
+    private DispatcherTimer? x11_key_timer;
 
     public MainWindow()
     {
@@ -131,11 +151,12 @@ public partial class MainWindow : Window
         if (current_animation_frames.Count > 0 && current_animation_frames[0].image != null)
         {
             hamster_img.Source = current_animation_frames[0].image;
+            update_window_region(current_animation_frames[0].image);
             animation_timer.Interval = TimeSpan.FromMilliseconds(current_animation_frames[0].duration > 0 ? current_animation_frames[0].duration : 100);
             animation_timer.Start();
         }
 
-        music_check_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        music_check_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(3000) };
         music_check_timer.Tick += music_check_timer_tick;
         if (is_music_listening_enabled)
         {
@@ -167,6 +188,11 @@ public partial class MainWindow : Window
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
         var hwnd = this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         if (hwnd == IntPtr.Zero) return;
+
+        var ex = GetWindowLongPtr(hwnd, gwl_exstyle).ToInt64();
+        ex = (ex | ws_ex_toolwindow) & ~ws_ex_appwindow;
+        SetWindowLongPtr(hwnd, gwl_exstyle, new IntPtr(ex));
+
         custom_wnd_proc_delegate = wnd_proc;
         old_wnd_proc = SetWindowLongPtr(hwnd, gwlp_wndproc, Marshal.GetFunctionPointerForDelegate(custom_wnd_proc_delegate));
     }
@@ -175,15 +201,22 @@ public partial class MainWindow : Window
     {
         if (msg == wm_nchittest)
         {
-            int sx = (short)(l_param.ToInt64() & 0xFFFF);
-            int sy = (short)((l_param.ToInt64() >> 16) & 0xFFFF);
-            var pt = new win32_point { x = sx, y = sy };
-            ScreenToClient(hwnd, ref pt);
-            var frame = current_animation_frames.Count > 0
-                ? current_animation_frames[current_frame_index < current_animation_frames.Count ? current_frame_index : 0]
-                : null;
-            if (frame?.image == null || !is_pixel_opaque(frame.image, pt.x, pt.y))
+            try
+            {
+                int sx = (short)(l_param.ToInt64() & 0xFFFF);
+                int sy = (short)((l_param.ToInt64() >> 16) & 0xFFFF);
+                var pt = new win32_point { x = sx, y = sy };
+                ScreenToClient(hwnd, ref pt);
+                var frame = current_animation_frames.Count > 0
+                    ? current_animation_frames[current_frame_index < current_animation_frames.Count ? current_frame_index : 0]
+                    : null;
+                if (frame?.image == null || !is_pixel_opaque(frame.image, pt.x, pt.y))
+                    return new IntPtr(httransparent);
+            }
+            catch
+            {
                 return new IntPtr(httransparent);
+            }
         }
         return CallWindowProc(old_wnd_proc, hwnd, msg, w_param, l_param);
     }
@@ -222,7 +255,7 @@ public partial class MainWindow : Window
         {
             var parts = line.Split('=');
             if (parts.Length != 2) continue;
-            if (parts[0] == "idle_delay_seconds" && double.TryParse(parts[1], out double d)) idle_delay_seconds = d;
+            if (parts[0] == "is_music_listening_enabled" && bool.TryParse(parts[1], out bool m)) is_music_listening_enabled = m;
             if (parts[0] == "is_music_listening_enabled" && bool.TryParse(parts[1], out bool b)) is_music_listening_enabled = b;
             if (parts[0] == "real_eat_files" && bool.TryParse(parts[1], out bool r)) real_eat_files = r;
             if (parts[0] == "permanent_delete" && bool.TryParse(parts[1], out bool pd)) permanent_delete = pd;
@@ -239,7 +272,6 @@ public partial class MainWindow : Window
         string settings_path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.txt");
         File.WriteAllLines(settings_path, new[]
         {
-            $"idle_delay_seconds={idle_delay_seconds}",
             $"is_music_listening_enabled={is_music_listening_enabled}",
             $"real_eat_files={real_eat_files}",
             $"permanent_delete={permanent_delete}",
@@ -284,7 +316,7 @@ public partial class MainWindow : Window
 
     private void afk_check_timer_tick(object? sender, EventArgs e)
     {
-        if (is_in_afk_mode || is_character_dragging_animation || is_dragging_file || is_typing_animation_active || (is_spotify_music_playing && is_music_listening_enabled) || is_screenshot_animation_active) return;
+        if (is_in_afk_mode || is_character_dragging_animation || is_dragging_file || is_typing_animation_active || (is_spotify_music_playing && is_music_listening_enabled) || is_screenshot_animation_active || is_write_mode_active) return;
         if ((DateTime.Now - last_user_activity_time).TotalMinutes >= afk_timeout_minutes) start_afk_animation();
     }
 
@@ -313,7 +345,7 @@ public partial class MainWindow : Window
 
     private void typing_check_timer_tick(object? sender, EventArgs e)
     {
-        if (is_in_afk_mode || is_character_dragging_animation || is_dragging_file || (is_spotify_music_playing && is_music_listening_enabled) || is_screenshot_animation_active) return;
+        if (is_in_afk_mode || is_character_dragging_animation || is_dragging_file || (is_spotify_music_playing && is_music_listening_enabled) || is_screenshot_animation_active || is_write_mode_active) return;
         bool is_user_typing = (DateTime.Now - last_key_press_time).TotalMilliseconds < typing_duration_threshold_ms;
         if (is_user_typing)
         {
@@ -389,17 +421,96 @@ public partial class MainWindow : Window
     }
 
     private void on_exit_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => Environment.Exit(0);
-    private void on_donate_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => Process.Start(new ProcessStartInfo { FileName = "https://www.donationalerts.com/r/just_blaing__", UseShellExecute = true });
+
+    private async void on_write_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var dlg = new WriteDialog();
+        string? text = await dlg.ShowDialog<string?>(this);
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        write_bubble_text = text;
+        is_write_mode_active = true;
+        idle_delay_timer?.Stop();
+        animation_timer?.Stop();
+
+        if (loaded_animations.ContainsKey("AnimTypingStart")) { load_animation("AnimTypingStart"); current_animation_name = "AnimTypingStart"; }
+        else if (loaded_animations.ContainsKey("AnimTyping")) { load_animation("AnimTyping"); current_animation_name = "AnimTyping"; }
+        else if (loaded_animations.ContainsKey("AnimTypingStop")) { load_animation("AnimTypingStop"); current_animation_name = "AnimTypingStop"; }
+        else { is_write_mode_active = false; show_bubble(); }
+    }
+
+    private void show_bubble()
+    {
+        bubble_follow_timer?.Stop();
+        bubble_window?.Close();
+        var anchor = get_bubble_anchor();
+        bubble_target = anchor;
+        bubble_window = new BubbleWindow(write_bubble_text, anchor);
+        bubble_window.Closed += (_, _) => { bubble_follow_timer?.Stop(); bubble_follow_timer = null; };
+        bubble_window.Show(this);
+        bubble_follow_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
+        bubble_follow_timer.Tick += bubble_follow_tick;
+        bubble_follow_timer.Start();
+    }
+
+    private PixelPoint get_bubble_anchor()
+    {
+        var (cx, top_y) = get_hamster_visual_bounds();
+        return new PixelPoint(this.Position.X + cx, this.Position.Y + top_y);
+    }
+
+    private void bubble_follow_tick(object? sender, EventArgs e)
+    {
+        if (bubble_window == null || !bubble_window.IsVisible) { bubble_follow_timer?.Stop(); return; }
+        bubble_target = get_bubble_anchor();
+        int bw = (int)bubble_window.Bounds.Width;
+        int bh = (int)bubble_window.Bounds.Height;
+        var target_pos = new PixelPoint(bubble_target.X - bw / 2, bubble_target.Y - bh - 6);
+        var cur = bubble_window.Position;
+        int dx = target_pos.X - cur.X;
+        int dy = target_pos.Y - cur.Y;
+        if (dx == 0 && dy == 0) return;
+        int nx = cur.X + (int)(dx * 0.07);
+        int ny = cur.Y + (int)(dy * 0.07);
+        if (nx == cur.X && dx != 0) nx = cur.X + Math.Sign(dx);
+        if (ny == cur.Y && dy != 0) ny = cur.Y + Math.Sign(dy);
+        bubble_window.Position = new PixelPoint(nx, ny);
+    }
+
+    private (int cx, int top_y) get_hamster_visual_bounds()
+    {
+        var frame = current_animation_frames.Count > 0
+            ? current_animation_frames[current_frame_index < current_animation_frames.Count ? current_frame_index : 0]
+            : null;
+        if (frame?.image == null) return ((int)hamster_img.Bounds.Width / 2, 0);
+
+        int w = frame.image.PixelSize.Width;
+        int h = frame.image.PixelSize.Height;
+        var alpha = get_alpha_data(frame.image);
+
+        int min_x = w, max_x = 0, min_y = h;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                if (alpha[y * w + x] > 10)
+                {
+                    if (x < min_x) min_x = x;
+                    if (x > max_x) max_x = x;
+                    if (y < min_y) min_y = y;
+                }
+
+        if (min_x > max_x) return (w / 2, 0);
+        return ((min_x + max_x) / 2, min_y);
+    }
+    private void on_donate_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => Process.Start(new ProcessStartInfo { FileName = "https://donatepay.ru/don/1493944", UseShellExecute = true });
 
     private async void on_settings_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         try
         {
-            var settings_form = new Settings(idle_delay_seconds, is_music_listening_enabled, music_whitelist, real_eat_files, permanent_delete);
+            var settings_form = new Settings(is_music_listening_enabled, music_whitelist, real_eat_files, permanent_delete);
             var result = await settings_form.ShowDialog<bool>(this);
             if (result)
             {
-                idle_delay_seconds = settings_form.idle_delay_seconds;
                 is_music_listening_enabled = settings_form.is_music_listening_enabled;
                 real_eat_files = settings_form.real_eat_files;
                 permanent_delete = settings_form.permanent_delete;
@@ -628,7 +739,7 @@ public partial class MainWindow : Window
     private Task<bool> detect_music_playing_async()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return Task.FromResult(detect_music_windows());
+            return Task.Run(() => detect_music_windows());
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             return Task.Run(() => detect_music_linux());
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
@@ -636,29 +747,161 @@ public partial class MainWindow : Window
         return Task.FromResult(false);
     }
 
+    [DllImport("ole32.dll")]
+    private static extern int CoCreateInstance(ref Guid rclsid, IntPtr punk_outer, uint dw_cls_ctx, ref Guid riid, out IntPtr pp_v);
+
+    [DllImport("ole32.dll")]
+    private static extern int CoInitializeEx(IntPtr reserved, uint dw_co_init);
+
+    [DllImport("ole32.dll")]
+    private static extern void CoUninitialize();
+
+    private static unsafe void** vtbl(IntPtr punk) => *(void***)punk;
+
+    private static unsafe int com_release(IntPtr punk)
+    {
+        if (punk == IntPtr.Zero) return 0;
+        return ((delegate* unmanaged<IntPtr, int>)vtbl(punk)[2])(punk);
+    }
+
+    private static unsafe int com_qi(IntPtr punk, ref Guid iid, out IntPtr result)
+    {
+        result = IntPtr.Zero;
+        if (punk == IntPtr.Zero) return unchecked((int)0x80004003);
+        fixed (Guid* p_iid = &iid)
+        fixed (IntPtr* p_result = &result)
+            return ((delegate* unmanaged<IntPtr, Guid*, IntPtr*, int>)vtbl(punk)[0])(punk, p_iid, p_result);
+    }
+
+    private static unsafe int imm_get_default_endpoint(IntPtr punk, int flow, int role, out IntPtr device)
+    {
+        device = IntPtr.Zero;
+        fixed (IntPtr* p = &device)
+            return ((delegate* unmanaged<IntPtr, int, int, IntPtr*, int>)vtbl(punk)[4])(punk, flow, role, p);
+    }
+
+    private static unsafe int imm_device_activate(IntPtr punk, ref Guid iid, uint ctx, out IntPtr result)
+    {
+        result = IntPtr.Zero;
+        fixed (Guid* p_iid = &iid)
+        fixed (IntPtr* p_result = &result)
+            return ((delegate* unmanaged<IntPtr, Guid*, uint, IntPtr, IntPtr*, int>)vtbl(punk)[3])(punk, p_iid, ctx, IntPtr.Zero, p_result);
+    }
+
+    private static unsafe int asm2_get_enumerator(IntPtr punk, out IntPtr sessions)
+    {
+        sessions = IntPtr.Zero;
+        fixed (IntPtr* p = &sessions)
+            return ((delegate* unmanaged<IntPtr, IntPtr*, int>)vtbl(punk)[5])(punk, p);
+    }
+
+    private static unsafe int ase_get_count(IntPtr punk, out int count)
+    {
+        count = 0;
+        fixed (int* p = &count)
+            return ((delegate* unmanaged<IntPtr, int*, int>)vtbl(punk)[3])(punk, p);
+    }
+
+    private static unsafe int ase_get_session(IntPtr punk, int index, out IntPtr session)
+    {
+        session = IntPtr.Zero;
+        fixed (IntPtr* p = &session)
+            return ((delegate* unmanaged<IntPtr, int, IntPtr*, int>)vtbl(punk)[4])(punk, index, p);
+    }
+
+    private static unsafe int asc_get_state(IntPtr punk, out int state)
+    {
+        state = 0;
+        fixed (int* p = &state)
+            return ((delegate* unmanaged<IntPtr, int*, int>)vtbl(punk)[3])(punk, p);
+    }
+
+    private static unsafe int asc2_get_pid(IntPtr punk, out uint pid)
+    {
+        pid = 0;
+        fixed (uint* p = &pid)
+            return ((delegate* unmanaged<IntPtr, uint*, int>)vtbl(punk)[14])(punk, p);
+    }
+
     private bool detect_music_windows()
     {
-        var targets = music_whitelist.Count > 0 ? music_whitelist : new List<string> { "Spotify" };
+        int co_hr = CoInitializeEx(IntPtr.Zero, 0x0);
+        bool co_inited = co_hr == 0 || co_hr == 1;
+
+        var clsid_mm = new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E");
+        var iid_mm = new Guid("A95664D2-9614-4F35-A746-DE8DB63617E6");
+        var iid_asm2 = new Guid("BFA971F1-4D5E-40BB-935E-967039BFBEE4");
+        var iid_asc2 = new Guid("bfb7ff88-7239-4fc9-8fa2-07c950be9c6d");
+        IntPtr enumerator = IntPtr.Zero, device = IntPtr.Zero, mgr = IntPtr.Zero, sessions = IntPtr.Zero;
         try
         {
-            foreach (var p in Process.GetProcesses())
+            if (CoCreateInstance(ref clsid_mm, IntPtr.Zero, 1, ref iid_mm, out enumerator) != 0 || enumerator == IntPtr.Zero)
+                return false;
+
+            if (imm_get_default_endpoint(enumerator, 0, 1, out device) != 0 || device == IntPtr.Zero)
+                return false;
+
+            if (imm_device_activate(device, ref iid_asm2, 23, out mgr) != 0 || mgr == IntPtr.Zero)
+                return false;
+
+            if (asm2_get_enumerator(mgr, out sessions) != 0 || sessions == IntPtr.Zero)
+                return false;
+
+            ase_get_count(sessions, out int count);
+
+            for (int i = 0; i < count; i++)
             {
+                IntPtr sess = IntPtr.Zero, sess2 = IntPtr.Zero;
                 try
                 {
-                    if (targets.Any(t => p.ProcessName.Contains(t, StringComparison.OrdinalIgnoreCase))
-                        && !string.IsNullOrEmpty(p.MainWindowTitle)
-                        && p.MainWindowTitle.Contains(" - "))
-                        return true;
+                    if (ase_get_session(sessions, i, out sess) != 0 || sess == IntPtr.Zero) continue;
+                    asc_get_state(sess, out int state);
+                    if (state != 1) continue;
+
+                    if (music_whitelist.Count > 0)
+                    {
+                        if (com_qi(sess, ref iid_asc2, out sess2) != 0 || sess2 == IntPtr.Zero) continue;
+                        if (asc2_get_pid(sess2, out uint pid) != 0 || pid == 0) continue;
+                        try
+                        {
+                            var p = Process.GetProcessById((int)pid);
+                            if (music_whitelist.Any(w => p.ProcessName.Contains(w, StringComparison.OrdinalIgnoreCase)))
+                                return true;
+                        }
+                        catch { }
+                    }
+                    else
+                    {
+                        if (com_qi(sess, ref iid_asc2, out sess2) != 0 || sess2 == IntPtr.Zero) continue;
+                        if (asc2_get_pid(sess2, out uint pid) != 0) continue;
+                        try
+                        {
+                            var p = Process.GetProcessById((int)pid);
+                            if (p.Id != Process.GetCurrentProcess().Id) return true;
+                        }
+                        catch { }
+                    }
                 }
                 catch { }
+                finally { com_release(sess2); com_release(sess); }
             }
         }
         catch { }
+        finally
+        {
+            com_release(sessions);
+            com_release(mgr);
+            com_release(device);
+            com_release(enumerator);
+            if (co_inited) CoUninitialize();
+        }
         return false;
     }
 
     private bool detect_music_linux()
     {
+        bool found = false;
+
         try
         {
             var psi = new ProcessStartInfo("playerctl", "status")
@@ -668,24 +911,58 @@ public partial class MainWindow : Window
                 CreateNoWindow = true
             };
             using var p = Process.Start(psi);
-            if (p == null) return false;
-            string output = p.StandardOutput.ReadToEnd().Trim();
-            p.WaitForExit();
-            if (output != "Playing") return false;
-            if (music_whitelist.Count == 0) return true;
-            var player_psi = new ProcessStartInfo("playerctl", "metadata --format '{{playerName}}'")
+            if (p != null)
+            {
+                string output = p.StandardOutput.ReadToEnd().Trim();
+                p.WaitForExit();
+                if (output == "Playing")
+                {
+                    if (music_whitelist.Count == 0) return true;
+                    var player_psi = new ProcessStartInfo("playerctl", "metadata --format '{{playerName}}'")
+                    {
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var pp = Process.Start(player_psi);
+                    if (pp != null)
+                    {
+                        string player = pp.StandardOutput.ReadToEnd().Trim();
+                        pp.WaitForExit();
+                        if (music_whitelist.Any(app => player.Contains(app, StringComparison.OrdinalIgnoreCase)))
+                            return true;
+                    }
+                    found = true;
+                }
+            }
+        }
+        catch { }
+
+        try
+        {
+            var psi = new ProcessStartInfo("pactl", "list sink-inputs")
             {
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            using var pp = Process.Start(player_psi);
-            if (pp == null) return true;
-            string player = pp.StandardOutput.ReadToEnd().Trim();
-            pp.WaitForExit();
-            return music_whitelist.Any(app => player.Contains(app, StringComparison.OrdinalIgnoreCase));
+            using var p = Process.Start(psi);
+            if (p == null) return found;
+            string raw = p.StandardOutput.ReadToEnd();
+            p.WaitForExit();
+
+            var blocks = raw.Split("Sink Input #", StringSplitOptions.RemoveEmptyEntries);
+            foreach (var block in blocks)
+            {
+                if (!block.Contains("Corked: no")) continue;
+                if (music_whitelist.Count == 0) return true;
+                if (music_whitelist.Any(app => block.Contains(app, StringComparison.OrdinalIgnoreCase)))
+                    return true;
+            }
         }
-        catch { return false; }
+        catch { }
+
+        return found;
     }
 
     private bool detect_music_macos()
@@ -748,6 +1025,7 @@ public partial class MainWindow : Window
             current_animation_frames = frames;
             current_frame_index = 0;
             hamster_img.Source = current_animation_frames[0].image;
+            update_window_region(current_animation_frames[0].image);
             if (animation_timer != null)
             {
                 animation_timer.Stop();
@@ -785,7 +1063,7 @@ public partial class MainWindow : Window
         {
             if (current_frame_index >= current_animation_frames.Count) current_frame_index = 0;
         }
-        else if (current_animation_name == "AnimTyping" && is_typing_animation_active && !is_in_afk_mode)
+        else if (current_animation_name == "AnimTyping" && is_typing_animation_active && !is_in_afk_mode && !is_write_mode_active)
         {
             if (current_frame_index >= current_animation_frames.Count) current_frame_index = 0;
         }
@@ -810,6 +1088,7 @@ public partial class MainWindow : Window
 
         var frame = current_animation_frames[current_frame_index];
         hamster_img.Source = frame.image;
+        update_window_region(frame.image);
         var new_interval = TimeSpan.FromMilliseconds(frame.duration > 0 ? frame.duration : 100);
         if (animation_timer.Interval != new_interval)
         {
@@ -826,7 +1105,13 @@ public partial class MainWindow : Window
         bool start_delay = false;
         animation_timer?.Stop();
 
-        if (prev_anim == "AnimScreenshotFinish")
+        if (is_write_mode_active && (prev_anim == "AnimTypingStart" || prev_anim == "AnimTyping" || prev_anim == "AnimTypingStop"))
+        {
+            if (prev_anim == "AnimTypingStart") next_anim = "AnimTyping";
+            else if (prev_anim == "AnimTyping") next_anim = "AnimTypingStop";
+            else { is_write_mode_active = false; show_bubble(); start_delay = true; }
+        }
+        else if (prev_anim == "AnimScreenshotFinish")
         {
             if (is_screenshot_animation_active)
             {
@@ -854,7 +1139,19 @@ public partial class MainWindow : Window
         else if (one_off_random_idle_animations.Contains(prev_anim)) { if (is_spotify_music_playing && is_music_listening_enabled && loaded_animations.ContainsKey(current_music_loop)) next_anim = current_music_loop; else if (is_dragging_file && loaded_animations.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else if (is_typing_animation_active && loaded_animations.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else start_delay = true; }
         else { if (is_spotify_music_playing && is_music_listening_enabled && loaded_animations.ContainsKey(current_music_loop)) next_anim = current_music_loop; else if (is_dragging_file && loaded_animations.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else if (is_typing_animation_active && loaded_animations.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else if (is_random_idle_sequence) { is_random_idle_sequence = false; start_delay = true; } else start_delay = true; }
 
-        if (start_delay && !is_in_afk_mode && !is_screenshot_animation_active) { load_animation("AnimMainIdle"); current_animation_name = "AnimMainIdle"; start_idle_delay(); }
+        if (start_delay && !is_in_afk_mode && !is_screenshot_animation_active)
+        {
+            animation_timer?.Stop();
+            current_animation_name = "AnimMainIdle";
+            if (loaded_animations.TryGetValue("AnimMainIdle", out var idle_frames) && idle_frames.Count > 0)
+            {
+                current_animation_frames = idle_frames;
+                current_frame_index = 0;
+                hamster_img.Source = idle_frames[0].image;
+                update_window_region(idle_frames[0].image);
+            }
+            start_idle_delay();
+        }
         else { load_animation(next_anim); current_animation_name = next_anim; }
 
         is_character_dragging_animation = current_animation_name == "AnimCharacterMoveStart" || current_animation_name == "AnimCharacterMoving" || current_animation_name == "AnimCharacterMoveFinish";
@@ -865,8 +1162,8 @@ public partial class MainWindow : Window
 
     private void start_idle_delay()
     {
-        if (is_in_afk_mode || is_character_dragging_animation || is_dragging_file || is_typing_animation_active || is_spotify_music_playing || is_screenshot_animation_active) { idle_delay_timer?.Stop(); return; }
-        if (idle_delay_timer != null) { idle_delay_timer.Stop(); idle_delay_timer.Interval = TimeSpan.FromMilliseconds(idle_delay_seconds * 1000); idle_delay_timer.Start(); }
+        if (is_in_afk_mode || is_character_dragging_animation || is_dragging_file || is_typing_animation_active || is_spotify_music_playing || is_screenshot_animation_active || is_write_mode_active) { idle_delay_timer?.Stop(); return; }
+        if (idle_delay_timer != null) { idle_delay_timer.Stop(); double max_ms = Math.Max(1500, idle_delay_seconds * 1000); idle_delay_timer.Interval = TimeSpan.FromMilliseconds(1000 + rnd.NextDouble() * (max_ms - 1000)); idle_delay_timer.Start(); }
     }
 
     private void idle_delay_timer_tick(object? sender, EventArgs e)
@@ -900,6 +1197,7 @@ public partial class MainWindow : Window
         load_animation(next_anim);
         current_animation_name = next_anim;
         is_random_idle_sequence = !is_in_afk_mode && (current_animation_name.StartsWith("AnimIdleStart") || current_animation_name.StartsWith("AnimIdleLoop") || current_animation_name.StartsWith("AnimIdleFinish"));
+        if (next_anim == "AnimMainIdle") start_idle_delay();
     }
 
     private unsafe byte[] get_alpha_data(Bitmap bmp)
@@ -921,6 +1219,38 @@ public partial class MainWindow : Window
     {
         if (x < 0 || y < 0 || x >= bmp.PixelSize.Width || y >= bmp.PixelSize.Height) return false;
         return get_alpha_data(bmp)[y * bmp.PixelSize.Width + x] > 10;
+    }
+
+    private void update_window_region(Bitmap? bmp)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+        var hwnd = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (hwnd == IntPtr.Zero) return;
+        if (bmp == null) { SetWindowRgn(hwnd, IntPtr.Zero, false); return; }
+
+        try
+        {
+            var alpha = get_alpha_data(bmp);
+            int w = bmp.PixelSize.Width;
+            int h = bmp.PixelSize.Height;
+            var region = CreateRectRgn(0, 0, 0, 0);
+            for (int y = 0; y < h; y++)
+            {
+                int x = 0;
+                while (x < w)
+                {
+                    while (x < w && alpha[y * w + x] <= 10) x++;
+                    if (x >= w) break;
+                    int start = x;
+                    while (x < w && alpha[y * w + x] > 10) x++;
+                    var row = CreateRectRgn(start, y, x, y + 1);
+                    CombineRgn(region, region, row, rgn_or);
+                    DeleteObject(row);
+                }
+            }
+            SetWindowRgn(hwnd, region, false);
+        }
+        catch { }
     }
 
     private void on_context_requested(object? sender, ContextRequestedEventArgs e)
@@ -954,7 +1284,7 @@ public partial class MainWindow : Window
             is_mouse_down = true;
             update_user_activity();
             idle_delay_timer?.Stop();
-            if (!is_in_afk_mode && !is_spotify_music_playing && !is_typing_animation_active && !is_dragging_file && !is_screenshot_animation_active && !uninterruptible_animations.Contains(current_animation_name) && !current_animation_name.StartsWith("AnimCharacterMove"))
+            if (!is_in_afk_mode && !is_spotify_music_playing && !is_typing_animation_active && !is_dragging_file && !is_screenshot_animation_active && !is_write_mode_active && !uninterruptible_animations.Contains(current_animation_name) && !current_animation_name.StartsWith("AnimCharacterMove"))
             {
                 animation_timer?.Stop();
                 if (loaded_animations.ContainsKey("AnimCharacterMoveStart")) { load_animation("AnimCharacterMoveStart"); current_animation_name = "AnimCharacterMoveStart"; }
@@ -972,7 +1302,7 @@ public partial class MainWindow : Window
 
             var screen_pos = this.PointToScreen(e.GetPosition(this));
             this.Position = new PixelPoint((int)(screen_pos.X + mouse_offset.X), (int)(screen_pos.Y + mouse_offset.Y));
-            if (!is_in_afk_mode && !is_dragging_file && !is_spotify_music_playing && !is_typing_animation_active && !is_screenshot_animation_active && current_animation_name != "AnimCharacterMoveStart" && current_animation_name != "AnimCharacterMoving" && current_animation_name != "AnimCharacterMoveFinish" && loaded_animations.ContainsKey("AnimCharacterMoving"))
+            if (!is_in_afk_mode && !is_dragging_file && !is_spotify_music_playing && !is_typing_animation_active && !is_screenshot_animation_active && !is_write_mode_active && current_animation_name != "AnimCharacterMoveStart" && current_animation_name != "AnimCharacterMoving" && current_animation_name != "AnimCharacterMoveFinish" && loaded_animations.ContainsKey("AnimCharacterMoving"))
             {
                 idle_delay_timer?.Stop();
                 animation_timer?.Stop();
@@ -998,7 +1328,7 @@ public partial class MainWindow : Window
 
     private void on_drag_enter(object? sender, DragEventArgs e)
     {
-        if (is_in_afk_mode || is_dragging_file || is_screenshot_animation_active) { e.DragEffects = DragDropEffects.None; return; }
+        if (is_in_afk_mode || is_dragging_file || is_screenshot_animation_active || is_write_mode_active) { e.DragEffects = DragDropEffects.None; return; }
         e.DragEffects = DragDropEffects.Copy;
         if (is_character_dragging_animation) is_mouse_down = false;
         if (!is_spotify_music_playing && !current_animation_name.StartsWith("AnimDragFile"))

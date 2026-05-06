@@ -20,11 +20,6 @@
     <Border CornerRadius="12" Background="Black" BorderBrush="#9400d3" BorderThickness="2">
         <Grid RowDefinitions="*,Auto">
             <StackPanel Grid.Row="0" Margin="20">
-                <TextBlock Text="задержка перед айдлом (сек):" Foreground="White"/>
-                <Grid ColumnDefinitions="*,Auto" Margin="0,10,0,0">
-                    <Slider x:Name="idle_slider" Minimum="1" Maximum="50" TickFrequency="5" Grid.Column="0" ValueChanged="on_slider_changed"/>
-                    <TextBlock x:Name="idle_val_text" Foreground="White" Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                </Grid>
                 <CheckBox x:Name="music_check" Content="слушать музыку" Foreground="White" Margin="0,10"/>
                 <CheckBox x:Name="eat_check" Content="по настоящему съедать файлы" Foreground="White" Margin="0,0,0,4"/>
                 <StackPanel Orientation="Horizontal" Margin="20,0,0,10" Spacing="16">
@@ -42,7 +37,6 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
                     <Button Content="ок" Click="on_ok_click" Background="#282828" Foreground="White" Width="80" HorizontalContentAlignment="Center" BorderThickness="0" CornerRadius="4"/>
                     <Button Content="отмена" Click="on_cancel_click" Background="#282828" Foreground="White" Width="80" HorizontalContentAlignment="Center" BorderThickness="0" CornerRadius="4"/>
-                    <Button Content="выйти" Click="on_exit_click" Background="#3a0000" Foreground="White" Width="80" HorizontalContentAlignment="Center" BorderThickness="0" CornerRadius="4"/>
                 </StackPanel>
             </Border>
         </Grid>

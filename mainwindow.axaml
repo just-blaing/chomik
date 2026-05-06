@@ -13,6 +13,7 @@
         PointerReleased="on_pointer_released">
     <Window.ContextMenu>
         <ContextMenu Background="Black" Foreground="White">
+            <MenuItem Header="написать..." Click="on_write_click"/>
             <MenuItem Header="заскриншотить экран" Click="on_screenshot_click">
                 <MenuItem.Icon>
                     <Image x:Name="icon_screenshot" Width="16" Height="16"/>
@@ -34,7 +35,7 @@
                 </MenuItem.Icon>
             </MenuItem>
             <Separator Background="#50ffffff"/>
-            <MenuItem Header="chomik v1.3" Click="on_about_click"/>
+            <MenuItem Header="chomik v1.3.1" Click="on_about_click"/>
         </ContextMenu>
     </Window.ContextMenu>
     <Image x:Name="hamster_image" Stretch="None" IsHitTestVisible="False"/>

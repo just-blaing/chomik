@@ -1,0 +1,30 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="chomik.BubbleWindow"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        SystemDecorations="None"
+        Topmost="True"
+        ShowInTaskbar="False"
+        SizeToContent="WidthAndHeight"
+        IsHitTestVisible="False">
+    <Grid RowDefinitions="Auto,9">
+        <Border Grid.Row="0"
+                Background="White"
+                CornerRadius="10"
+                Padding="14,9"
+                BoxShadow="0 3 12 2 #55000000">
+            <TextBlock x:Name="bubble_text"
+                       Foreground="#111111"
+                       FontSize="13"
+                       TextWrapping="Wrap"
+                       MaxWidth="240"
+                       MinWidth="30"/>
+        </Border>
+        <Path Grid.Row="1"
+              Fill="White"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Top"
+              Data="M 0,0 L 16,0 L 8,9 Z"/>
+    </Grid>
+</Window>

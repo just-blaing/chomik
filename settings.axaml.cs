@@ -14,7 +14,6 @@ public partial class Settings : Window
     private Point mouse_offset;
     private bool is_mouse_down;
     private bool is_initialized;
-    public double idle_delay_seconds { get; private set; }
     public bool is_music_listening_enabled { get; private set; }
     public bool real_eat_files { get; private set; }
     public bool permanent_delete { get; private set; }
@@ -26,10 +25,9 @@ public partial class Settings : Window
         InitializeComponent();
     }
 
-    public Settings(double initial_delay, bool initial_music, List<string> initial_whitelist, bool initial_eat, bool initial_perm_delete)
+    public Settings(bool initial_music, List<string> initial_whitelist, bool initial_eat, bool initial_perm_delete)
     {
         InitializeComponent();
-        idle_delay_seconds = initial_delay;
         is_music_listening_enabled = initial_music;
         real_eat_files = initial_eat;
         permanent_delete = initial_perm_delete;
@@ -39,7 +37,6 @@ public partial class Settings : Window
         this.FindControl<ListBox>("whitelist_box")!.ItemsSource = whitelist_items;
         this.FindControl<CheckBox>("music_check")!.IsChecked = is_music_listening_enabled;
         this.FindControl<CheckBox>("eat_check")!.IsChecked = real_eat_files;
-        this.FindControl<TextBlock>("idle_val_text")!.Text = idle_delay_seconds.ToString("0.0");
 
         if (initial_perm_delete)
             this.FindControl<RadioButton>("eat_perm_radio")!.IsChecked = true;
@@ -47,15 +44,6 @@ public partial class Settings : Window
             this.FindControl<RadioButton>("eat_trash_radio")!.IsChecked = true;
 
         is_initialized = true;
-        this.FindControl<Slider>("idle_slider")!.Value = idle_delay_seconds * 10;
-    }
-
-    private void on_slider_changed(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e)
-    {
-        if (!is_initialized) return;
-        idle_delay_seconds = e.NewValue / 10.0;
-        var txt = this.FindControl<TextBlock>("idle_val_text");
-        if (txt != null) txt.Text = idle_delay_seconds.ToString("0.0");
     }
 
     private async void on_add_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -97,8 +85,6 @@ public partial class Settings : Window
     }
 
     private void on_cancel_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => Close(false);
-
-    private void on_exit_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => Environment.Exit(0);
 
     private void on_pointer_pressed(object? sender, PointerPressedEventArgs e)
     {

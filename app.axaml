@@ -4,5 +4,23 @@
              RequestedThemeVariant="Dark">
     <Application.Styles>
         <FluentTheme />
+        <Style Selector="CheckBox:checked /template/ Path#checkMark">
+            <Setter Property="Fill" Value="Black"/>
+        </Style>
+        <Style Selector="Button.flat">
+            <Setter Property="Background" Value="#282828"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="MinWidth" Value="80"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.flat:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#3c3c3c"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style Selector="Button.flat:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#1c1c1c"/>
+        </Style>
     </Application.Styles>
 </Application>

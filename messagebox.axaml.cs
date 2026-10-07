@@ -1,102 +1,50 @@
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using System;
-using System.Collections.Generic;
 
 namespace chomik;
 
-public partial class MessageBox : Window
+public partial class MessageBox : drag_window
 {
-    private Point mouse_offset;
-    private bool is_mouse_down;
     private DispatcherTimer? anim_timer;
-    private List<animation_frame>? frames;
+    private sprite_sheet? sheet;
+    private sprite_view view;
     private int cur_frame;
-    private Image img_control;
-    private const double corner_r = 12;
 
-    public MessageBox()
-    {
-        InitializeComponent();
-        img_control = this.FindControl<Image>("anim_image")!;
-    }
+    public MessageBox() : this(string.Empty) { }
 
-    public MessageBox(string msg, List<animation_frame>? anims = null)
+    public MessageBox(string msg, sprite_sheet? anim = null)
     {
         InitializeComponent();
         this.FindControl<TextBlock>("msg_text")!.Text = msg;
-        img_control = this.FindControl<Image>("anim_image")!;
-        frames = anims;
+        view = this.FindControl<sprite_view>("anim_view")!;
+        sheet = anim;
+        if (sheet == null || sheet.count == 0) return;
 
-        if (frames is { Count: > 0 })
-        {
-            cur_frame = 0;
-            img_control.Source = frames[0].image;
-            anim_timer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(frames[0].duration > 0 ? frames[0].duration : 100)
-            };
-
-            anim_timer.Tick += (s, e) =>
-            {
-                cur_frame = (cur_frame + 1) % frames.Count;
-                img_control.Source = frames[cur_frame].image;
-                var ms = frames[cur_frame].duration > 0 ? frames[cur_frame].duration : 100;
-                var new_interval = TimeSpan.FromMilliseconds(ms);
-                if (anim_timer.Interval != new_interval)
-                {
-                    anim_timer.Stop();
-                    anim_timer.Interval = new_interval;
-                    anim_timer.Start();
-                }
-            };
-
-            anim_timer.Start();
-        }
+        var crop = sheet.union_bounds();
+        view.configure(crop, 90.0 / crop.Height, 1.6);
+        view.show(sheet, 0);
+        anim_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(frame_ms()) };
+        anim_timer.Tick += anim_tick;
+        anim_timer.Start();
     }
 
-    private bool in_rounded_rect(double x, double y)
+    private int frame_ms()
     {
-        double w = Bounds.Width, h = Bounds.Height, r = corner_r;
-        if (x < 0 || y < 0 || x > w || y > h) return false;
-        if (x < r && y < r)
-            return Math.Sqrt(Math.Pow(x - r, 2) + Math.Pow(y - r, 2)) <= r;
-        if (x > w - r && y < r)
-            return Math.Sqrt(Math.Pow(x - (w - r), 2) + Math.Pow(y - r, 2)) <= r;
-        if (x < r && y > h - r)
-            return Math.Sqrt(Math.Pow(x - r, 2) + Math.Pow(y - (h - r), 2)) <= r;
-        if (x > w - r && y > h - r)
-            return Math.Sqrt(Math.Pow(x - (w - r), 2) + Math.Pow(y - (h - r), 2)) <= r;
-        return true;
+        int d = sheet!.durations[cur_frame];
+        return d > 0 ? d : 100;
     }
 
-    private void on_ok_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => Close();
-
-    private void on_pointer_pressed(object? sender, PointerPressedEventArgs e)
+    private void anim_tick(object? sender, EventArgs e)
     {
-        var pos = e.GetPosition(this);
-        if (!in_rounded_rect(pos.X, pos.Y)) return;
-        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-        {
-            var screen_click = this.PointToScreen(pos);
-            mouse_offset = new Point(this.Position.X - screen_click.X, this.Position.Y - screen_click.Y);
-            is_mouse_down = true;
-        }
+        cur_frame = (cur_frame + 1) % sheet!.count;
+        view.show(sheet, cur_frame);
+        var next = TimeSpan.FromMilliseconds(frame_ms());
+        if (anim_timer!.Interval != next) anim_timer.Interval = next;
     }
 
-    private void on_pointer_moved(object? sender, PointerEventArgs e)
-    {
-        if (!is_mouse_down) return;
-        var screen_pos = this.PointToScreen(e.GetPosition(this));
-        Position = new PixelPoint((int)(screen_pos.X + mouse_offset.X), (int)(screen_pos.Y + mouse_offset.Y));
-    }
-
-    private void on_pointer_released(object? sender, PointerReleasedEventArgs e)
-    {
-        if (e.InitialPressMouseButton == MouseButton.Left) is_mouse_down = false;
-    }
+    private void on_ok_click(object? sender, RoutedEventArgs e) => Close();
 
     protected override void OnClosed(EventArgs e)
     {

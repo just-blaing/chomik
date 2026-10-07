@@ -1,7 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
@@ -10,7 +12,6 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using Avalonia.Platform;
 
 namespace chomik;
 
@@ -18,207 +19,223 @@ public partial class MainWindow : Window
 {
     private Point mouse_offset;
     private bool is_mouse_down = false;
-    private Dictionary<string, List<animation_frame>> loaded_animations = new();
-    private Dictionary<Bitmap, byte[]> alpha_cache = new();
-    private List<animation_frame> current_animation_frames = new();
-    private int current_frame_index = 0;
+    private anim_lib loaded_anim = new(string.Empty);
+    private sprite_sheet? sheet;
+    private int cur_frame_index = 0;
+    private bool is_opened = false;
+    private bool is_error_shown = false;
     private DispatcherTimer? animation_timer;
     private Random rnd = new();
-    private string current_animation_name = "AnimMainIdle";
+    private string cur_animation_name = "AnimMainIdle";
     private int idle_loop_counter = 0;
     private int max_idle_loops = 1;
-    private bool is_random_idle_sequence = false;
-    private string current_idle_start = "";
-    private string current_idle_loop = "";
-    private string current_idle_finish = "";
-    private bool is_spotify_music_playing = false;
-    private string current_music_start = "AnimMusicStart";
-    private string current_music_loop = "AnimMusicLoop";
-    private string current_music_finish = "AnimMusicFinish";
+    private bool is_random_idle = false;
+    private string cur_idle_start = "";
+    private string cur_idle_loop = "";
+    private string cur_idle_finish = "";
+    private bool is_music_playing = false;
+    private string cur_music_start = "AnimMusicStart";
+    private string cur_music_loop = "AnimMusicLoop";
+    private string cur_music_finish = "AnimMusicFinish";
     private DispatcherTimer? music_check_timer;
     private bool is_dragging_file = false;
-    private bool is_character_dragging_animation = false;
+    private bool is_chomik_dragging_animation = false;
     private List<string> one_off_random_idle_animations = new() { "AnimIdle1", "AnimIdle3", "AnimIdle4", "AnimIdle5", "AnimIdle6" };
-    private HashSet<string> uninterruptible_animations = new();
-    private bool is_screenshot_animation_active = false;
-    private double idle_delay_seconds = 3.0;
-    private bool is_music_listening_enabled = true;
+    private HashSet<string> inf_animations = new();
+    private bool is_screenshot_anim_active = false;
+    private double idle_delay = 3.0;
+    private bool is_listening_enabled = true;
     private List<string> music_whitelist = new();
     private DateTime last_user_activity_time = DateTime.Now;
     private DispatcherTimer? afk_check_timer;
     private bool is_in_afk_mode = false;
-    private int afk_timeout_minutes = 3;
-    private string afk_start_anim = "AnimIdleStart3";
-    private string afk_loop_anim = "AnimIdleLoop3";
-    private string afk_finish_anim = "AnimIdleFinish3";
+    private int afk_timeout = 3;
+    private string afk_start = "AnimIdleStart3";
+    private string afk_loop = "AnimIdleLoop3";
+    private string afk_finish = "AnimIdleFinish3";
     private bool real_eat_files = false;
-    private bool permanent_delete = false;
-    private bool is_write_mode_active = false;
+    private bool perm_delete = false;
+    private bool write_mode_active = false;
     private string write_bubble_text = "";
     private BubbleWindow? bubble_window;
-    private DispatcherTimer? bubble_follow_timer;
-    private PixelPoint bubble_target;
-    private const int wh_keyboard_ll = 13;
-    private const int wm_keydown = 0x0100;
-    private const int wm_syskeydown = 0x0104;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Kbdllhookstruct
-    {
-        public uint vk_code;
-        public uint scan_code;
-        public uint flags;
-        public uint time;
-        public IntPtr dw_extra_info;
-    }
-
-    private delegate IntPtr low_level_keyboard_proc(int n_code, IntPtr w_param, IntPtr l_param);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int n_index);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int n_index, IntPtr new_long);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr CallWindowProc(IntPtr prev_wnd_func, IntPtr hwnd, uint msg, IntPtr w_param, IntPtr l_param);
-
-    [DllImport("user32.dll")]
-    private static extern bool ScreenToClient(IntPtr hwnd, ref win32_point pt);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct win32_point { public int x, y; }
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr SetWindowsHookEx(int id_hook, low_level_keyboard_proc lpfn, IntPtr h_mod, uint dw_thread_id);
-
-    [DllImport("user32.dll")]
-    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr CallNextHookEx(IntPtr hhk, int n_code, IntPtr w_param, IntPtr l_param);
-
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr GetModuleHandle(string lp_module_name);
-
-    private delegate IntPtr wnd_proc_delegate(IntPtr hwnd, uint msg, IntPtr w_param, IntPtr l_param);
-
-    private const int gwlp_wndproc = -4;
-    private const int gwl_exstyle = -20;
-    private const int ws_ex_toolwindow = 0x00000080;
-    private const int ws_ex_appwindow = 0x00040000;
-    private const int wm_nchittest = 0x0084;
-    private const int httransparent = -1;
-    private const int rgn_or = 2;
-
-    [DllImport("gdi32.dll")] private static extern IntPtr CreateRectRgn(int x1, int y1, int x2, int y2);
-    [DllImport("gdi32.dll")] private static extern int CombineRgn(IntPtr dest, IntPtr src1, IntPtr src2, int mode);
-    [DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr obj);
-    [DllImport("user32.dll")] private static extern int SetWindowRgn(IntPtr hwnd, IntPtr hrgn, bool redraw);
-
-    private wnd_proc_delegate? custom_wnd_proc_delegate;
+    private win.wnd_proc_delegate? custom_wnd_proc_delegate;
     private IntPtr old_wnd_proc = IntPtr.Zero;
-
     private IntPtr hook_id = IntPtr.Zero;
-    private low_level_keyboard_proc? proc;
+    private win.key_proc? proc;
     private DateTime last_key_press_time = DateTime.MinValue;
     private DateTime typing_session_start_time = DateTime.MinValue;
     private DispatcherTimer? typing_check_timer;
-    private int typing_duration_threshold_ms = 2000;
-    private bool is_typing_animation_active = false;
+    private int typing_duration = 2000;
+    private bool typing_animation_active = false;
     private DispatcherTimer? idle_delay_timer;
-    private Image hamster_img;
-    private IntPtr x11_display = IntPtr.Zero;
-    private byte[] x11_prev_keys = new byte[32];
-    private DispatcherTimer? x11_key_timer;
+    private DispatcherTimer? top_timer;
+    private DispatcherTimer? key_poll_timer;
+    private static string data_dir => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "chomik");
+
+    private static string settings_path => Path.Combine(data_dir, "settings.txt");
 
     public MainWindow()
     {
         InitializeComponent();
-        hamster_img = this.FindControl<Image>("hamster_image")!;
+        Opacity = 0;
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DragEnterEvent, on_drag_enter);
         AddHandler(DragDrop.DropEvent, on_drop);
         AddHandler(ContextRequestedEvent, on_context_requested, handledEventsToo: false);
+        PositionChanged += (_, _) => move_bubble();
+        ScalingChanged += (_, _) => apply_region();
+
         load_settings();
+        apply_language();
         populate_uninterruptible_animations();
-        preload_animations();
-        load_initial_animation();
         load_menu_icons();
 
         animation_timer = new DispatcherTimer();
         animation_timer.Tick += animation_timer_tick;
-        if (current_animation_frames.Count > 0 && current_animation_frames[0].image != null)
-        {
-            hamster_img.Source = current_animation_frames[0].image;
-            update_window_region(current_animation_frames[0].image);
-            animation_timer.Interval = TimeSpan.FromMilliseconds(current_animation_frames[0].duration > 0 ? current_animation_frames[0].duration : 100);
-            animation_timer.Start();
-        }
+
+        idle_delay_timer = new DispatcherTimer();
+        idle_delay_timer.Tick += idle_delay_timer_tick;
 
         music_check_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(3000) };
         music_check_timer.Tick += music_check_timer_tick;
-        if (is_music_listening_enabled)
+
+        typing_check_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+        typing_check_timer.Tick += typing_check_timer_tick;
+
+        afk_check_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(10000) };
+        afk_check_timer.Tick += afk_check_timer_tick;
+
+        top_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        top_timer.Tick += top_timer_tick;
+
+        loaded_anim = new anim_lib(find_anims_path());
+        load_initial_animation();
+
+        typing_check_timer.Start();
+        afk_check_timer.Start();
+        if (is_listening_enabled)
         {
             music_check_timer.Start();
             _ = check_music_state_async();
         }
 
-        typing_check_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-        typing_check_timer.Tick += typing_check_timer_tick;
-        typing_check_timer.Start();
-
-        idle_delay_timer = new DispatcherTimer();
-        idle_delay_timer.Tick += idle_delay_timer_tick;
-
-        afk_check_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(10000) };
-        afk_check_timer.Tick += afk_check_timer_tick;
-        afk_check_timer.Start();
-
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (OperatingSystem.IsWindows())
         {
             proc = hook_callback;
-            hook_id = set_hook(proc);
+            hook_id = win.set_key_hook(proc);
+        }
+        else
+        {
+            key_poll_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+            key_poll_timer.Tick += (_, _) =>
+            {
+                if (!plat.key_down()) return;
+                last_key_press_time = DateTime.Now;
+                update_user_activity();
+            };
+            key_poll_timer.Start();
         }
     }
 
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+        is_opened = true;
+        hook_window();
+        apply_region();
+        top_timer?.Start();
+        DispatcherTimer.RunOnce(() => Opacity = 1, TimeSpan.FromMilliseconds(150));
+    }
+
+    private void top_timer_tick(object? sender, EventArgs e)
+    {
+        if (!is_opened || !OperatingSystem.IsWindows()) return;
+        var hwnd = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (hwnd != IntPtr.Zero) win.keep_on_top(hwnd);
+    }
+
+    private void hook_window()
+    {
+        if (!OperatingSystem.IsWindows()) return;
         var hwnd = this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         if (hwnd == IntPtr.Zero) return;
 
-        var ex = GetWindowLongPtr(hwnd, gwl_exstyle).ToInt64();
-        ex = (ex | ws_ex_toolwindow) & ~ws_ex_appwindow;
-        SetWindowLongPtr(hwnd, gwl_exstyle, new IntPtr(ex));
+        var ex = win.GetWindowLongPtr(hwnd, win.gwl_exstyle).ToInt64();
+        ex = (ex | win.ws_ex_toolwindow) & ~win.ws_ex_appwindow;
+        win.SetWindowLongPtr(hwnd, win.gwl_exstyle, new IntPtr(ex));
 
         custom_wnd_proc_delegate = wnd_proc;
-        old_wnd_proc = SetWindowLongPtr(hwnd, gwlp_wndproc, Marshal.GetFunctionPointerForDelegate(custom_wnd_proc_delegate));
+        old_wnd_proc = win.SetWindowLongPtr(hwnd, win.gwlp_wndproc, Marshal.GetFunctionPointerForDelegate(custom_wnd_proc_delegate));
     }
 
     private IntPtr wnd_proc(IntPtr hwnd, uint msg, IntPtr w_param, IntPtr l_param)
     {
-        if (msg == wm_nchittest)
+        if (msg == win.wm_nchittest)
         {
             try
             {
                 int sx = (short)(l_param.ToInt64() & 0xFFFF);
                 int sy = (short)((l_param.ToInt64() >> 16) & 0xFFFF);
-                var pt = new win32_point { x = sx, y = sy };
-                ScreenToClient(hwnd, ref pt);
-                var frame = current_animation_frames.Count > 0
-                    ? current_animation_frames[current_frame_index < current_animation_frames.Count ? current_frame_index : 0]
-                    : null;
-                if (frame?.image == null || !is_pixel_opaque(frame.image, pt.x, pt.y))
-                    return new IntPtr(httransparent);
+                var pt = new win.win32_point { x = sx, y = sy };
+                win.ScreenToClient(hwnd, ref pt);
+                double scale = RenderScaling;
+                if (!is_opaque(pt.x / scale, pt.y / scale)) return new IntPtr(win.httransparent);
             }
             catch
             {
-                return new IntPtr(httransparent);
+                return new IntPtr(win.httransparent);
             }
         }
-        return CallWindowProc(old_wnd_proc, hwnd, msg, w_param, l_param);
+        return win.CallWindowProc(old_wnd_proc, hwnd, msg, w_param, l_param);
+    }
+
+    private static string find_anims_path()
+    {
+        string base_dir = AppContext.BaseDirectory;
+        string in_files = Path.Combine(base_dir, "files", "anims.txt");
+        return File.Exists(in_files) ? in_files : Path.Combine(base_dir, "anims.txt");
+    }
+
+    private bool is_opaque(double x, double y)
+    {
+        if (sheet == null) return false;
+        int i = cur_frame_index < sheet.count ? cur_frame_index : 0;
+        return sheet.opaque(i, (int)Math.Floor(x), (int)Math.Floor(y));
+    }
+
+    private int frame_ms(int i)
+    {
+        if (sheet == null || i >= sheet.count) return 100;
+        return sheet.durations[i] > 0 ? sheet.durations[i] : 100;
+    }
+
+    private void fit_window()
+    {
+        if (sheet == null) return;
+        if (Width != sheet.frame_w) Width = sheet.frame_w;
+        if (Height != sheet.frame_h) Height = sheet.frame_h;
+    }
+
+    private void show_frame(int i)
+    {
+        if (sheet == null) return;
+        cur_frame_index = i;
+        chomik_view.show(sheet, i);
+        apply_region();
+        move_bubble();
+    }
+
+    private void apply_region()
+    {
+        if (!is_opened || sheet == null) return;
+        var hwnd = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (hwnd == IntPtr.Zero) return;
+        try
+        {
+            if (OperatingSystem.IsWindows()) win.set_region(hwnd, sheet, cur_frame_index, RenderScaling);
+            else if (OperatingSystem.IsLinux()) plat.set_shape(hwnd, sheet, cur_frame_index, RenderScaling);
+        }
+        catch { }
     }
 
     private void load_menu_icons()
@@ -229,7 +246,8 @@ public partial class MainWindow : Window
             { "icon_exit", "icon1.ico" },
             { "icon_donate", "icon_2.ico" },
             { "icon_settings", "icon3.ico" },
-            { "icon_screenshot", "icon4.ico" }
+            { "icon_screenshot", "icon4.ico" },
+            { "icon_write", "icon5.ico" }
         };
         foreach (var kv in icon_map)
         {
@@ -247,65 +265,73 @@ public partial class MainWindow : Window
         }
     }
 
+    private void apply_language()
+    {
+        set_header("mi_write", "write");
+        set_header("mi_screenshot", "screenshot");
+        set_header("mi_exit", "exit");
+        set_header("mi_donate", "donate");
+        set_header("mi_settings", "settings");
+    }
+
+    private void set_header(string name, string key)
+    {
+        var item = this.FindControl<MenuItem>(name);
+        if (item != null) item.Header = localization.t(key);
+    }
+
     private void load_settings()
     {
-        string settings_path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.txt");
-        if (!File.Exists(settings_path)) return;
-        foreach (var line in File.ReadAllLines(settings_path))
+        string path = settings_path;
+        if (!File.Exists(path)) path = Path.Combine(AppContext.BaseDirectory, "settings.txt");
+        if (!File.Exists(path)) return;
+        foreach (var line in File.ReadAllLines(path))
         {
-            var parts = line.Split('=');
-            if (parts.Length != 2) continue;
-            if (parts[0] == "is_music_listening_enabled" && bool.TryParse(parts[1], out bool m)) is_music_listening_enabled = m;
-            if (parts[0] == "is_music_listening_enabled" && bool.TryParse(parts[1], out bool b)) is_music_listening_enabled = b;
-            if (parts[0] == "real_eat_files" && bool.TryParse(parts[1], out bool r)) real_eat_files = r;
-            if (parts[0] == "permanent_delete" && bool.TryParse(parts[1], out bool pd)) permanent_delete = pd;
-            if (parts[0] == "music_whitelist")
+            int eq = line.IndexOf('=');
+            if (eq < 0) continue;
+            string key = line[..eq];
+            string value = line[(eq + 1)..];
+            if (key == "is_music_listening_enabled" && bool.TryParse(value, out bool listening)) is_listening_enabled = listening;
+            else if (key == "real_eat_files" && bool.TryParse(value, out bool eat)) real_eat_files = eat;
+            else if (key == "permanent_delete" && bool.TryParse(value, out bool perm)) perm_delete = perm;
+            else if (key == "language") localization.use(value);
+            else if (key == "music_whitelist")
             {
                 music_whitelist.Clear();
-                if (!string.IsNullOrWhiteSpace(parts[1])) music_whitelist.AddRange(parts[1].Split(';'));
+                music_whitelist.AddRange(value.Split(';', StringSplitOptions.RemoveEmptyEntries));
             }
         }
     }
 
     private void save_settings()
     {
-        string settings_path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.txt");
-        File.WriteAllLines(settings_path, new[]
+        try
         {
-            $"is_music_listening_enabled={is_music_listening_enabled}",
-            $"real_eat_files={real_eat_files}",
-            $"permanent_delete={permanent_delete}",
-            $"music_whitelist={string.Join(";", music_whitelist)}"
-        });
-    }
-
-    private IntPtr set_hook(low_level_keyboard_proc p)
-    {
-        using var cur_process = Process.GetCurrentProcess();
-        using var cur_module = cur_process.MainModule;
-        if (cur_module?.ModuleName != null) return SetWindowsHookEx(wh_keyboard_ll, p, GetModuleHandle(cur_module.ModuleName), 0);
-        return IntPtr.Zero;
+            Directory.CreateDirectory(data_dir);
+            File.WriteAllLines(settings_path, new[]
+            {
+                $"is_music_listening_enabled={is_listening_enabled}",
+                $"real_eat_files={real_eat_files}",
+                $"permanent_delete={perm_delete}",
+                $"language={localization.lang}",
+                $"music_whitelist={string.Join(";", music_whitelist)}"
+            });
+        }
+        catch { }
     }
 
     private IntPtr hook_callback(int n_code, IntPtr w_param, IntPtr l_param)
     {
-        if (n_code >= 0 && (w_param == (IntPtr)wm_keydown || w_param == (IntPtr)wm_syskeydown))
+        if (n_code >= 0 && (w_param == (IntPtr)win.wm_keydown || w_param == (IntPtr)win.wm_syskeydown) && l_param != IntPtr.Zero)
         {
-            if (l_param != IntPtr.Zero)
+            var kb = Marshal.PtrToStructure<win.kbd_hook_struct>(l_param);
+            if (kb.vk_code >= 0x20 && kb.vk_code <= 0xFE)
             {
-                var structure = Marshal.PtrToStructure(l_param, typeof(Kbdllhookstruct));
-                if (structure is Kbdllhookstruct kb_struct)
-                {
-                    uint vk = kb_struct.vk_code;
-                    if (vk >= 0x20 && vk <= 0xFE)
-                    {
-                        last_key_press_time = DateTime.Now;
-                        update_user_activity();
-                    }
-                }
+                last_key_press_time = DateTime.Now;
+                update_user_activity();
             }
         }
-        return CallNextHookEx(hook_id, n_code, w_param, l_param);
+        return win.CallNextHookEx(hook_id, n_code, w_param, l_param);
     }
 
     private void update_user_activity()
@@ -316,82 +342,82 @@ public partial class MainWindow : Window
 
     private void afk_check_timer_tick(object? sender, EventArgs e)
     {
-        if (is_in_afk_mode || is_character_dragging_animation || is_dragging_file || is_typing_animation_active || (is_spotify_music_playing && is_music_listening_enabled) || is_screenshot_animation_active || is_write_mode_active) return;
-        if ((DateTime.Now - last_user_activity_time).TotalMinutes >= afk_timeout_minutes) start_afk_animation();
+        if (is_in_afk_mode || is_chomik_dragging_animation || is_dragging_file || typing_animation_active || (is_music_playing && is_listening_enabled) || is_screenshot_anim_active || write_mode_active) return;
+        if ((DateTime.Now - last_user_activity_time).TotalMinutes >= afk_timeout) start_afk_animation();
     }
 
     private void start_afk_animation()
     {
-        if (is_in_afk_mode || !loaded_animations.ContainsKey(afk_start_anim)) return;
+        if (is_in_afk_mode || !loaded_anim.ContainsKey(afk_start)) return;
         is_in_afk_mode = true;
         idle_delay_timer?.Stop();
         animation_timer?.Stop();
-        load_animation(afk_start_anim);
-        current_animation_name = afk_start_anim;
+        load_animation(afk_start);
+        cur_animation_name = afk_start;
     }
 
     private void end_afk_animation()
     {
         if (!is_in_afk_mode) return;
         is_in_afk_mode = false;
-        if ((current_animation_name == afk_start_anim || current_animation_name == afk_loop_anim) && loaded_animations.ContainsKey(afk_finish_anim))
+        if ((cur_animation_name == afk_start || cur_animation_name == afk_loop) && loaded_anim.ContainsKey(afk_finish))
         {
             animation_timer?.Stop();
-            load_animation(afk_finish_anim);
-            current_animation_name = afk_finish_anim;
+            load_animation(afk_finish);
+            cur_animation_name = afk_finish;
         }
         else handle_animation_finish();
     }
 
     private void typing_check_timer_tick(object? sender, EventArgs e)
     {
-        if (is_in_afk_mode || is_character_dragging_animation || is_dragging_file || (is_spotify_music_playing && is_music_listening_enabled) || is_screenshot_animation_active || is_write_mode_active) return;
-        bool is_user_typing = (DateTime.Now - last_key_press_time).TotalMilliseconds < typing_duration_threshold_ms;
+        if (is_in_afk_mode || is_chomik_dragging_animation || is_dragging_file || (is_music_playing && is_listening_enabled) || is_screenshot_anim_active || write_mode_active) return;
+        bool is_user_typing = (DateTime.Now - last_key_press_time).TotalMilliseconds < typing_duration;
         if (is_user_typing)
         {
-            if (!is_typing_animation_active)
+            if (!typing_animation_active)
             {
                 if (typing_session_start_time == DateTime.MinValue) typing_session_start_time = DateTime.Now;
-                if ((DateTime.Now - typing_session_start_time).TotalMilliseconds >= typing_duration_threshold_ms)
+                if ((DateTime.Now - typing_session_start_time).TotalMilliseconds >= typing_duration)
                 {
                     idle_delay_timer?.Stop();
                     animation_timer?.Stop();
-                    if (loaded_animations.ContainsKey("AnimTypingStart"))
+                    if (loaded_anim.ContainsKey("AnimTypingStart"))
                     {
                         load_animation("AnimTypingStart");
-                        current_animation_name = "AnimTypingStart";
+                        cur_animation_name = "AnimTypingStart";
                     }
-                    else if (loaded_animations.ContainsKey("AnimTyping"))
+                    else if (loaded_anim.ContainsKey("AnimTyping"))
                     {
                         load_animation("AnimTyping");
-                        current_animation_name = "AnimTyping";
+                        cur_animation_name = "AnimTyping";
                     }
-                    is_typing_animation_active = true;
+                    typing_animation_active = true;
                 }
             }
             else
             {
-                if (current_animation_name == "AnimTypingStart" && current_frame_index >= current_animation_frames.Count - 1 && loaded_animations.ContainsKey("AnimTyping"))
+                if (cur_animation_name == "AnimTypingStart" && sheet != null && cur_frame_index >= sheet.count - 1 && loaded_anim.ContainsKey("AnimTyping"))
                 {
                     animation_timer?.Stop();
                     load_animation("AnimTyping");
-                    current_animation_name = "AnimTyping";
+                    cur_animation_name = "AnimTyping";
                 }
             }
         }
         else
         {
-            if (is_typing_animation_active && current_animation_name != "AnimTypingStop")
+            if (typing_animation_active && cur_animation_name != "AnimTypingStop")
             {
-                if (loaded_animations.ContainsKey("AnimTypingStop"))
+                if (loaded_anim.ContainsKey("AnimTypingStop"))
                 {
                     animation_timer?.Stop();
                     load_animation("AnimTypingStop");
-                    current_animation_name = "AnimTypingStop";
+                    cur_animation_name = "AnimTypingStop";
                 }
                 else
                 {
-                    is_typing_animation_active = false;
+                    typing_animation_active = false;
                     handle_animation_finish();
                 }
             }
@@ -401,135 +427,100 @@ public partial class MainWindow : Window
 
     private void populate_uninterruptible_animations()
     {
-        uninterruptible_animations.Clear();
-        uninterruptible_animations.Add("AnimIdleStart1");
-        uninterruptible_animations.Add("AnimIdleStart2");
-        uninterruptible_animations.Add("AnimIdleFinish1");
-        uninterruptible_animations.Add("AnimIdleFinish2");
-        foreach (var anim in one_off_random_idle_animations) uninterruptible_animations.Add(anim);
-        uninterruptible_animations.Add("AnimTypingStart");
-        uninterruptible_animations.Add("AnimTypingStop");
-        uninterruptible_animations.Add(current_music_start);
-        uninterruptible_animations.Add(current_music_finish);
-        uninterruptible_animations.Add("AnimDragFileStart");
-        uninterruptible_animations.Add("AnimDragFileFinish");
-        uninterruptible_animations.Add("AnimCharacterMoveStart");
-        uninterruptible_animations.Add("AnimCharacterMoveFinish");
-        uninterruptible_animations.Add(afk_start_anim);
-        uninterruptible_animations.Add(afk_finish_anim);
-        uninterruptible_animations.Add("AnimScreenshotFinish");
+        inf_animations.Clear();
+        inf_animations.Add("AnimIdleStart1");
+        inf_animations.Add("AnimIdleStart2");
+        inf_animations.Add("AnimIdleFinish1");
+        inf_animations.Add("AnimIdleFinish2");
+        foreach (var anim in one_off_random_idle_animations) inf_animations.Add(anim);
+        inf_animations.Add("AnimTypingStart");
+        inf_animations.Add("AnimTypingStop");
+        inf_animations.Add(cur_music_start);
+        inf_animations.Add(cur_music_finish);
+        inf_animations.Add("AnimDragFileStart");
+        inf_animations.Add("AnimDragFileFinish");
+        inf_animations.Add("AnimCharacterMoveStart");
+        inf_animations.Add("AnimCharacterMoveFinish");
+        inf_animations.Add(afk_start);
+        inf_animations.Add(afk_finish);
+        inf_animations.Add("AnimScreenshotFinish");
     }
 
-    private void on_exit_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => Environment.Exit(0);
+    private void on_exit_click(object? sender, RoutedEventArgs e) => Environment.Exit(0);
 
-    private async void on_write_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private async void on_write_click(object? sender, RoutedEventArgs e)
     {
         var dlg = new WriteDialog();
         string? text = await dlg.ShowDialog<string?>(this);
         if (string.IsNullOrWhiteSpace(text)) return;
 
         write_bubble_text = text;
-        is_write_mode_active = true;
+        write_mode_active = true;
         idle_delay_timer?.Stop();
         animation_timer?.Stop();
 
-        if (loaded_animations.ContainsKey("AnimTypingStart")) { load_animation("AnimTypingStart"); current_animation_name = "AnimTypingStart"; }
-        else if (loaded_animations.ContainsKey("AnimTyping")) { load_animation("AnimTyping"); current_animation_name = "AnimTyping"; }
-        else if (loaded_animations.ContainsKey("AnimTypingStop")) { load_animation("AnimTypingStop"); current_animation_name = "AnimTypingStop"; }
-        else { is_write_mode_active = false; show_bubble(); }
+        if (loaded_anim.ContainsKey("AnimTypingStart")) { load_animation("AnimTypingStart"); cur_animation_name = "AnimTypingStart"; }
+        else if (loaded_anim.ContainsKey("AnimTyping")) { load_animation("AnimTyping"); cur_animation_name = "AnimTyping"; }
+        else if (loaded_anim.ContainsKey("AnimTypingStop")) { load_animation("AnimTypingStop"); cur_animation_name = "AnimTypingStop"; }
+        else { write_mode_active = false; show_bubble(); }
     }
 
     private void show_bubble()
     {
-        bubble_follow_timer?.Stop();
         bubble_window?.Close();
-        var anchor = get_bubble_anchor();
-        bubble_target = anchor;
-        bubble_window = new BubbleWindow(write_bubble_text, anchor);
-        bubble_window.Closed += (_, _) => { bubble_follow_timer?.Stop(); bubble_follow_timer = null; };
-        bubble_window.Show(this);
-        bubble_follow_timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
-        bubble_follow_timer.Tick += bubble_follow_tick;
-        bubble_follow_timer.Start();
+        var created = new BubbleWindow(write_bubble_text, get_bubble_anchor());
+        created.Closed += (_, _) => { if (bubble_window == created) bubble_window = null; };
+        bubble_window = created;
+        created.Show(this);
     }
+
+    private void move_bubble() => bubble_window?.move_to(get_bubble_anchor());
 
     private PixelPoint get_bubble_anchor()
     {
-        var (cx, top_y) = get_hamster_visual_bounds();
-        return new PixelPoint(this.Position.X + cx, this.Position.Y + top_y);
+        var (cx, top_y) = get_chomik_bounds();
+        double scale = RenderScaling;
+        return new PixelPoint(Position.X + (int)(cx * scale), Position.Y + (int)(top_y * scale));
     }
 
-    private void bubble_follow_tick(object? sender, EventArgs e)
+    private (int cx, int top_y) get_chomik_bounds()
     {
-        if (bubble_window == null || !bubble_window.IsVisible) { bubble_follow_timer?.Stop(); return; }
-        bubble_target = get_bubble_anchor();
-        int bw = (int)bubble_window.Bounds.Width;
-        int bh = (int)bubble_window.Bounds.Height;
-        var target_pos = new PixelPoint(bubble_target.X - bw / 2, bubble_target.Y - bh - 6);
-        var cur = bubble_window.Position;
-        int dx = target_pos.X - cur.X;
-        int dy = target_pos.Y - cur.Y;
-        if (dx == 0 && dy == 0) return;
-        int nx = cur.X + (int)(dx * 0.07);
-        int ny = cur.Y + (int)(dy * 0.07);
-        if (nx == cur.X && dx != 0) nx = cur.X + Math.Sign(dx);
-        if (ny == cur.Y && dy != 0) ny = cur.Y + Math.Sign(dy);
-        bubble_window.Position = new PixelPoint(nx, ny);
+        if (sheet == null) return (0, 0);
+        var b = sheet.bounds(cur_frame_index < sheet.count ? cur_frame_index : 0);
+        return (b.X + b.Width / 2, b.Y);
     }
 
-    private (int cx, int top_y) get_hamster_visual_bounds()
-    {
-        var frame = current_animation_frames.Count > 0
-            ? current_animation_frames[current_frame_index < current_animation_frames.Count ? current_frame_index : 0]
-            : null;
-        if (frame?.image == null) return ((int)hamster_img.Bounds.Width / 2, 0);
+    private void on_donate_click(object? sender, RoutedEventArgs e) => Process.Start(new ProcessStartInfo { FileName = "https://www.donationalerts.com/r/not_blaing", UseShellExecute = true });
 
-        int w = frame.image.PixelSize.Width;
-        int h = frame.image.PixelSize.Height;
-        var alpha = get_alpha_data(frame.image);
-
-        int min_x = w, max_x = 0, min_y = h;
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-                if (alpha[y * w + x] > 10)
-                {
-                    if (x < min_x) min_x = x;
-                    if (x > max_x) max_x = x;
-                    if (y < min_y) min_y = y;
-                }
-
-        if (min_x > max_x) return (w / 2, 0);
-        return ((min_x + max_x) / 2, min_y);
-    }
-    private void on_donate_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => Process.Start(new ProcessStartInfo { FileName = "https://donatepay.ru/don/1493944", UseShellExecute = true });
-
-    private async void on_settings_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private async void on_settings_click(object? sender, RoutedEventArgs e)
     {
         try
         {
-            var settings_form = new Settings(is_music_listening_enabled, music_whitelist, real_eat_files, permanent_delete);
+            var settings_form = new Settings(is_listening_enabled, music_whitelist, real_eat_files, perm_delete);
             var result = await settings_form.ShowDialog<bool>(this);
             if (result)
             {
-                is_music_listening_enabled = settings_form.is_music_listening_enabled;
+                is_listening_enabled = settings_form.is_listening_enabled;
                 real_eat_files = settings_form.real_eat_files;
-                permanent_delete = settings_form.permanent_delete;
+                perm_delete = settings_form.perm_delete;
                 music_whitelist.Clear();
                 music_whitelist.AddRange(settings_form.music_whitelist);
+                localization.use(settings_form.language);
+                apply_language();
                 save_settings();
 
-                if (is_music_listening_enabled && music_check_timer != null && !music_check_timer.IsEnabled)
+                if (is_listening_enabled && music_check_timer != null && !music_check_timer.IsEnabled)
                 {
                     music_check_timer.Start();
                     _ = check_music_state_async();
                 }
-                else if (!is_music_listening_enabled && music_check_timer != null && music_check_timer.IsEnabled)
+                else if (!is_listening_enabled && music_check_timer != null && music_check_timer.IsEnabled)
                 {
                     music_check_timer.Stop();
-                    if (is_spotify_music_playing)
+                    if (is_music_playing)
                     {
-                        is_spotify_music_playing = false;
-                        if (current_animation_name == current_music_start || current_animation_name == current_music_loop) handle_animation_finish();
+                        is_music_playing = false;
+                        if (cur_animation_name == cur_music_start || cur_animation_name == cur_music_loop) handle_animation_finish();
                     }
                 }
             }
@@ -537,559 +528,182 @@ public partial class MainWindow : Window
         catch { }
     }
 
-    private void on_screenshot_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private void on_screenshot_click(object? sender, RoutedEventArgs e)
     {
-        if (is_in_afk_mode || is_character_dragging_animation || is_dragging_file) return;
-        is_screenshot_animation_active = true;
+        if (is_in_afk_mode || is_chomik_dragging_animation || is_dragging_file) return;
+        is_screenshot_anim_active = true;
         idle_delay_timer?.Stop();
         animation_timer?.Stop();
-        if (loaded_animations.ContainsKey("AnimScreenshotFinish"))
+        if (loaded_anim.ContainsKey("AnimScreenshotFinish"))
         {
             load_animation("AnimScreenshotFinish");
-            current_animation_name = "AnimScreenshotFinish";
+            cur_animation_name = "AnimScreenshotFinish";
         }
     }
 
-    private async void on_about_click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private async void on_about_click(object? sender, RoutedEventArgs e)
     {
-        List<animation_frame>? frames = loaded_animations.ContainsKey("AnimMusicLoop") ? loaded_animations["AnimMusicLoop"] : null;
-        var box = new MessageBox("created with love❤\nauthor: blaing", frames);
+        var box = new MessageBox("created with love❤\nauthor: blaing", loaded_anim.open_copy("AnimMusicLoop"));
         await box.ShowDialog(this);
     }
 
     private async Task take_screenshot()
     {
+        Opacity = 0;
         try
         {
-            this.Hide();
-            await Task.Delay(200);
+            await Task.Delay(250);
+            Directory.CreateDirectory(data_dir);
+            string out_path = Path.Combine(data_dir, "screenshot.png");
+            if (File.Exists(out_path)) File.Delete(out_path);
 
-            string out_path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "screenshot.png");
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                var tools = new[] { ("scrot", $"\"{out_path}\""), ("import", $"-window root \"{out_path}\""), ("gnome-screenshot", $"-f \"{out_path}\"") };
-                foreach (var (tool, args) in tools)
-                {
-                    try
-                    {
-                        using var p = Process.Start(new ProcessStartInfo(tool, args) { UseShellExecute = false, CreateNoWindow = true });
-                        p?.WaitForExit();
-                        if (File.Exists(out_path)) break;
-                    }
-                    catch { }
-                }
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                using var p = Process.Start(new ProcessStartInfo("screencapture", $"\"{out_path}\"") { UseShellExecute = false, CreateNoWindow = true });
-                p?.WaitForExit();
-            }
-            else
-            {
-                var screen = Screens.Primary;
-                if (screen == null) return;
-                var rect = screen.Bounds;
-                var rtb = new RenderTargetBitmap(new PixelSize(rect.Width, rect.Height), new Vector(96, 96));
-                rtb.Render(this);
-                rtb.Save(out_path);
-            }
-
-            var top_level = TopLevel.GetTopLevel(this);
-            if (top_level?.Clipboard != null && File.Exists(out_path))
+            bool done = OperatingSystem.IsWindows() ? capture_windows(out_path) : await capture_external(out_path);
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (done && !OperatingSystem.IsWindows() && clipboard != null)
             {
                 var data = new DataObject();
-                data.Set(DataFormats.Files, new[] { out_path });
-                await top_level.Clipboard.SetDataObjectAsync(data);
+                data.Set(DataFormats.FileNames, new[] { out_path });
+                await clipboard.SetDataObjectAsync(data);
             }
         }
         catch { }
         finally
         {
-            await Dispatcher.UIThread.InvokeAsync(() => this.Show());
+            Opacity = 1;
         }
     }
 
-    private static string get_base_dir()
+    private bool capture_windows(string out_path)
     {
-        string exe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "";
-        string exe_dir = string.IsNullOrEmpty(exe) ? "" : Path.GetDirectoryName(exe) ?? "";
-        string app_dir = AppDomain.CurrentDomain.BaseDirectory;
-        foreach (var dir in new[] { exe_dir, app_dir })
-        {
-            if (!string.IsNullOrEmpty(dir) && File.Exists(Path.Combine(dir, "files", "anims.txt"))) return dir;
-            if (!string.IsNullOrEmpty(dir) && File.Exists(Path.Combine(dir, "anims.txt"))) return dir;
-        }
-        return app_dir;
+        var screen = Screens.Primary;
+        if (screen == null) return false;
+        using var bmp = win.capture(screen.Bounds);
+        if (bmp == null) return false;
+        var hwnd = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        bool copied = win.copy_image(bmp, hwnd);
+        bmp.Save(out_path);
+        return copied;
     }
 
-    private void preload_animations()
+    private static async Task<bool> capture_external(string out_path)
     {
-        loaded_animations.Clear();
-        string log = Path.Combine(Path.GetTempPath(), "chomik_debug.txt");
-        string base_dir = "";
-        string anims_file = "";
-        string ani_folder = "";
-        try
-        {
-            base_dir = get_base_dir();
-            anims_file = Path.Combine(base_dir, "files", "anims.txt");
-            ani_folder = Path.Combine(base_dir, "files");
-            if (!File.Exists(anims_file)) anims_file = Path.Combine(base_dir, "anims.txt");
-            if (!Directory.Exists(ani_folder)) ani_folder = base_dir;
-
-            File.WriteAllText(log,
-                $"base_dir: {base_dir}\n" +
-                $"anims_file: {anims_file}\n" +
-                $"anims_exists: {File.Exists(anims_file)}\n" +
-                $"ani_folder: {ani_folder}\n" +
-                $"folder_exists: {Directory.Exists(ani_folder)}\n");
-
-            if (!File.Exists(anims_file)) return;
-
-            string[] lines = File.ReadAllLines(anims_file);
-            File.AppendAllText(log, $"lines_count: {lines.Length}\nfirst_line: [{(lines.Length > 0 ? lines[0] : "")}]\n");
-
-            string? current_section = null;
-            List<animation_frame>? current_list = null;
-
-            foreach (string line in lines)
+        var tools = OperatingSystem.IsMacOS()
+            ? new[] { ("screencapture", $"-x \"{out_path}\"") }
+            : new[]
             {
-                string t = line.Trim();
-                if (string.IsNullOrWhiteSpace(t) || t.StartsWith("//") || t.StartsWith("#")) continue;
-                if (t.StartsWith("Anim"))
-                {
-                    if (current_section != null && current_list != null && current_list.Count > 0) loaded_animations[current_section] = current_list;
-                    current_section = t;
-                    current_list = new();
-                }
-                else if (current_section != null && current_list != null)
-                {
-                    if (int.TryParse(t, out _)) continue;
-                    string[] parts = t.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                    if (parts.Length >= 2 && parts[0].EndsWith(".png", StringComparison.OrdinalIgnoreCase) && int.TryParse(parts[1], out int duration))
-                    {
-                        string f_path = Path.Combine(ani_folder, parts[0]);
-                        if (File.Exists(f_path))
-                        {
-                            try
-                            {
-                                using var stream = new FileStream(f_path, FileMode.Open, FileAccess.Read);
-                                current_list.Add(new animation_frame(new Bitmap(stream), duration));
-                            }
-                            catch (Exception ex)
-                            {
-                                File.AppendAllText(log, $"bitmap_error [{parts[0]}]: {ex.Message}\n");
-                            }
-                        }
-                        else
-                        {
-                            File.AppendAllText(log, $"file_not_found: {f_path}\n");
-                        }
-                    }
-                }
-            }
-            if (current_section != null && current_list != null && current_list.Count > 0) loaded_animations[current_section] = current_list;
-            File.AppendAllText(log, $"loaded_animations_count: {loaded_animations.Count}\n");
-        }
-        catch (Exception ex)
+                ("scrot", $"\"{out_path}\""),
+                ("maim", $"\"{out_path}\""),
+                ("spectacle", $"-b -n -f -o \"{out_path}\""),
+                ("grim", $"\"{out_path}\""),
+                ("gnome-screenshot", $"-f \"{out_path}\""),
+                ("import", $"-window root \"{out_path}\"")
+            };
+        foreach (var (tool, args) in tools)
         {
-            try { File.AppendAllText(log, $"EXCEPTION: {ex}\n"); } catch { }
-        }
-    }
-
-    private async void music_check_timer_tick(object? sender, EventArgs e) => await check_music_state_async();
-
-    private async Task check_music_state_async()
-    {
-        if (!is_music_listening_enabled)
-        {
-            if (is_spotify_music_playing)
+            try
             {
-                is_spotify_music_playing = false;
-                if (current_animation_name == current_music_start || current_animation_name == current_music_loop) handle_animation_finish();
+                using var p = Process.Start(new ProcessStartInfo(tool, args) { UseShellExecute = false, CreateNoWindow = true });
+                if (p == null) continue;
+                await p.WaitForExitAsync();
+                if (File.Exists(out_path)) return true;
             }
-            return;
-        }
-
-        bool prev_state = is_spotify_music_playing;
-        bool curr_state = await detect_music_playing_async();
-        is_spotify_music_playing = curr_state;
-
-        if (is_spotify_music_playing != prev_state && !is_in_afk_mode && !is_character_dragging_animation && !is_dragging_file && !is_typing_animation_active && !is_screenshot_animation_active)
-        {
-            idle_delay_timer?.Stop();
-            animation_timer?.Stop();
-            if (is_spotify_music_playing)
-            {
-                if (loaded_animations.ContainsKey(current_music_start)) { load_animation(current_music_start); current_animation_name = current_music_start; }
-                else if (loaded_animations.ContainsKey(current_music_loop)) { load_animation(current_music_loop); current_animation_name = current_music_loop; }
-            }
-            else
-            {
-                if (current_animation_name == current_music_start || current_animation_name == current_music_loop)
-                {
-                    if (loaded_animations.ContainsKey(current_music_finish)) { load_animation(current_music_finish); current_animation_name = current_music_finish; }
-                    else handle_animation_finish();
-                }
-            }
-        }
-    }
-
-    private Task<bool> detect_music_playing_async()
-    {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return Task.Run(() => detect_music_windows());
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            return Task.Run(() => detect_music_linux());
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            return Task.Run(() => detect_music_macos());
-        return Task.FromResult(false);
-    }
-
-    [DllImport("ole32.dll")]
-    private static extern int CoCreateInstance(ref Guid rclsid, IntPtr punk_outer, uint dw_cls_ctx, ref Guid riid, out IntPtr pp_v);
-
-    [DllImport("ole32.dll")]
-    private static extern int CoInitializeEx(IntPtr reserved, uint dw_co_init);
-
-    [DllImport("ole32.dll")]
-    private static extern void CoUninitialize();
-
-    private static unsafe void** vtbl(IntPtr punk) => *(void***)punk;
-
-    private static unsafe int com_release(IntPtr punk)
-    {
-        if (punk == IntPtr.Zero) return 0;
-        return ((delegate* unmanaged<IntPtr, int>)vtbl(punk)[2])(punk);
-    }
-
-    private static unsafe int com_qi(IntPtr punk, ref Guid iid, out IntPtr result)
-    {
-        result = IntPtr.Zero;
-        if (punk == IntPtr.Zero) return unchecked((int)0x80004003);
-        fixed (Guid* p_iid = &iid)
-        fixed (IntPtr* p_result = &result)
-            return ((delegate* unmanaged<IntPtr, Guid*, IntPtr*, int>)vtbl(punk)[0])(punk, p_iid, p_result);
-    }
-
-    private static unsafe int imm_get_default_endpoint(IntPtr punk, int flow, int role, out IntPtr device)
-    {
-        device = IntPtr.Zero;
-        fixed (IntPtr* p = &device)
-            return ((delegate* unmanaged<IntPtr, int, int, IntPtr*, int>)vtbl(punk)[4])(punk, flow, role, p);
-    }
-
-    private static unsafe int imm_device_activate(IntPtr punk, ref Guid iid, uint ctx, out IntPtr result)
-    {
-        result = IntPtr.Zero;
-        fixed (Guid* p_iid = &iid)
-        fixed (IntPtr* p_result = &result)
-            return ((delegate* unmanaged<IntPtr, Guid*, uint, IntPtr, IntPtr*, int>)vtbl(punk)[3])(punk, p_iid, ctx, IntPtr.Zero, p_result);
-    }
-
-    private static unsafe int asm2_get_enumerator(IntPtr punk, out IntPtr sessions)
-    {
-        sessions = IntPtr.Zero;
-        fixed (IntPtr* p = &sessions)
-            return ((delegate* unmanaged<IntPtr, IntPtr*, int>)vtbl(punk)[5])(punk, p);
-    }
-
-    private static unsafe int ase_get_count(IntPtr punk, out int count)
-    {
-        count = 0;
-        fixed (int* p = &count)
-            return ((delegate* unmanaged<IntPtr, int*, int>)vtbl(punk)[3])(punk, p);
-    }
-
-    private static unsafe int ase_get_session(IntPtr punk, int index, out IntPtr session)
-    {
-        session = IntPtr.Zero;
-        fixed (IntPtr* p = &session)
-            return ((delegate* unmanaged<IntPtr, int, IntPtr*, int>)vtbl(punk)[4])(punk, index, p);
-    }
-
-    private static unsafe int asc_get_state(IntPtr punk, out int state)
-    {
-        state = 0;
-        fixed (int* p = &state)
-            return ((delegate* unmanaged<IntPtr, int*, int>)vtbl(punk)[3])(punk, p);
-    }
-
-    private static unsafe int asc2_get_pid(IntPtr punk, out uint pid)
-    {
-        pid = 0;
-        fixed (uint* p = &pid)
-            return ((delegate* unmanaged<IntPtr, uint*, int>)vtbl(punk)[14])(punk, p);
-    }
-
-    private bool detect_music_windows()
-    {
-        int co_hr = CoInitializeEx(IntPtr.Zero, 0x0);
-        bool co_inited = co_hr == 0 || co_hr == 1;
-
-        var clsid_mm = new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E");
-        var iid_mm = new Guid("A95664D2-9614-4F35-A746-DE8DB63617E6");
-        var iid_asm2 = new Guid("BFA971F1-4D5E-40BB-935E-967039BFBEE4");
-        var iid_asc2 = new Guid("bfb7ff88-7239-4fc9-8fa2-07c950be9c6d");
-        IntPtr enumerator = IntPtr.Zero, device = IntPtr.Zero, mgr = IntPtr.Zero, sessions = IntPtr.Zero;
-        try
-        {
-            if (CoCreateInstance(ref clsid_mm, IntPtr.Zero, 1, ref iid_mm, out enumerator) != 0 || enumerator == IntPtr.Zero)
-                return false;
-
-            if (imm_get_default_endpoint(enumerator, 0, 1, out device) != 0 || device == IntPtr.Zero)
-                return false;
-
-            if (imm_device_activate(device, ref iid_asm2, 23, out mgr) != 0 || mgr == IntPtr.Zero)
-                return false;
-
-            if (asm2_get_enumerator(mgr, out sessions) != 0 || sessions == IntPtr.Zero)
-                return false;
-
-            ase_get_count(sessions, out int count);
-
-            for (int i = 0; i < count; i++)
-            {
-                IntPtr sess = IntPtr.Zero, sess2 = IntPtr.Zero;
-                try
-                {
-                    if (ase_get_session(sessions, i, out sess) != 0 || sess == IntPtr.Zero) continue;
-                    asc_get_state(sess, out int state);
-                    if (state != 1) continue;
-
-                    if (music_whitelist.Count > 0)
-                    {
-                        if (com_qi(sess, ref iid_asc2, out sess2) != 0 || sess2 == IntPtr.Zero) continue;
-                        if (asc2_get_pid(sess2, out uint pid) != 0 || pid == 0) continue;
-                        try
-                        {
-                            var p = Process.GetProcessById((int)pid);
-                            if (music_whitelist.Any(w => p.ProcessName.Contains(w, StringComparison.OrdinalIgnoreCase)))
-                                return true;
-                        }
-                        catch { }
-                    }
-                    else
-                    {
-                        if (com_qi(sess, ref iid_asc2, out sess2) != 0 || sess2 == IntPtr.Zero) continue;
-                        if (asc2_get_pid(sess2, out uint pid) != 0) continue;
-                        try
-                        {
-                            var p = Process.GetProcessById((int)pid);
-                            if (p.Id != Process.GetCurrentProcess().Id) return true;
-                        }
-                        catch { }
-                    }
-                }
-                catch { }
-                finally { com_release(sess2); com_release(sess); }
-            }
-        }
-        catch { }
-        finally
-        {
-            com_release(sessions);
-            com_release(mgr);
-            com_release(device);
-            com_release(enumerator);
-            if (co_inited) CoUninitialize();
+            catch { }
         }
         return false;
     }
 
-    private bool detect_music_linux()
-    {
-        bool found = false;
-
-        try
-        {
-            var psi = new ProcessStartInfo("playerctl", "status")
-            {
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var p = Process.Start(psi);
-            if (p != null)
-            {
-                string output = p.StandardOutput.ReadToEnd().Trim();
-                p.WaitForExit();
-                if (output == "Playing")
-                {
-                    if (music_whitelist.Count == 0) return true;
-                    var player_psi = new ProcessStartInfo("playerctl", "metadata --format '{{playerName}}'")
-                    {
-                        RedirectStandardOutput = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    };
-                    using var pp = Process.Start(player_psi);
-                    if (pp != null)
-                    {
-                        string player = pp.StandardOutput.ReadToEnd().Trim();
-                        pp.WaitForExit();
-                        if (music_whitelist.Any(app => player.Contains(app, StringComparison.OrdinalIgnoreCase)))
-                            return true;
-                    }
-                    found = true;
-                }
-            }
-        }
-        catch { }
-
-        try
-        {
-            var psi = new ProcessStartInfo("pactl", "list sink-inputs")
-            {
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var p = Process.Start(psi);
-            if (p == null) return found;
-            string raw = p.StandardOutput.ReadToEnd();
-            p.WaitForExit();
-
-            var blocks = raw.Split("Sink Input #", StringSplitOptions.RemoveEmptyEntries);
-            foreach (var block in blocks)
-            {
-                if (!block.Contains("Corked: no")) continue;
-                if (music_whitelist.Count == 0) return true;
-                if (music_whitelist.Any(app => block.Contains(app, StringComparison.OrdinalIgnoreCase)))
-                    return true;
-            }
-        }
-        catch { }
-
-        return found;
-    }
-
-    private bool detect_music_macos()
-    {
-        try
-        {
-            string script = music_whitelist.Count == 0
-                ? "tell application \"Spotify\" to if player state is playing then return \"yes\""
-                : string.Join(" ", music_whitelist.Select(app => $"try\ntell application \"{app}\" to if player state is playing then return \"yes\"\nend try"));
-
-            var psi = new ProcessStartInfo("osascript", $"-e '{script}'")
-            {
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var p = Process.Start(psi);
-            if (p == null) return false;
-            string output = p.StandardOutput.ReadToEnd().Trim();
-            p.WaitForExit();
-            return output.Contains("yes", StringComparison.OrdinalIgnoreCase);
-        }
-        catch { return false; }
-    }
-
     private void load_initial_animation()
     {
-        is_random_idle_sequence = false;
+        is_random_idle = false;
         idle_loop_counter = 0;
-        current_idle_start = ""; current_idle_loop = ""; current_idle_finish = "";
-        is_typing_animation_active = false;
+        cur_idle_start = ""; cur_idle_loop = ""; cur_idle_finish = "";
+        typing_animation_active = false;
         last_key_press_time = DateTime.MinValue;
         typing_session_start_time = DateTime.MinValue;
         is_dragging_file = false;
-        is_character_dragging_animation = false;
+        is_chomik_dragging_animation = false;
         is_in_afk_mode = false;
-        is_screenshot_animation_active = false;
+        is_screenshot_anim_active = false;
         idle_delay_timer?.Stop();
-
-        _ = check_music_state_async().ContinueWith(t => Dispatcher.UIThread.Invoke(() =>
-        {
-            if (is_spotify_music_playing && is_music_listening_enabled)
-            {
-                if (loaded_animations.ContainsKey(current_music_loop)) { load_animation(current_music_loop); current_animation_name = current_music_loop; }
-                else if (loaded_animations.ContainsKey(current_music_start)) { load_animation(current_music_start); current_animation_name = current_music_start; }
-                else { load_animation("AnimMainIdle"); current_animation_name = "AnimMainIdle"; start_idle_delay(); }
-            }
-            else { load_animation("AnimMainIdle"); current_animation_name = "AnimMainIdle"; start_idle_delay(); }
-        }));
+        load_animation("AnimMainIdle");
+        cur_animation_name = "AnimMainIdle";
+        start_idle_delay();
     }
 
     private void load_animation(string anim_name)
     {
         if (string.IsNullOrEmpty(anim_name)) anim_name = "AnimMainIdle";
-        is_character_dragging_animation = anim_name == "AnimCharacterMoveStart" || anim_name == "AnimCharacterMoving" || anim_name == "AnimCharacterMoveFinish";
-        is_screenshot_animation_active = anim_name == "AnimScreenshotFinish";
+        is_chomik_dragging_animation = anim_name == "AnimCharacterMoveStart" || anim_name == "AnimCharacterMoving" || anim_name == "AnimCharacterMoveFinish";
+        is_screenshot_anim_active = anim_name == "AnimScreenshotFinish";
 
-        if (loaded_animations.TryGetValue(anim_name, out var frames) && frames.Count > 0)
+        var next = loaded_anim.get(anim_name);
+        if (next != null && next.count > 0)
         {
-            current_animation_frames = frames;
-            current_frame_index = 0;
-            hamster_img.Source = current_animation_frames[0].image;
-            update_window_region(current_animation_frames[0].image);
+            sheet = next;
+            fit_window();
+            show_frame(0);
             if (animation_timer != null)
             {
                 animation_timer.Stop();
-                animation_timer.Interval = TimeSpan.FromMilliseconds(current_animation_frames[0].duration > 0 ? current_animation_frames[0].duration : 100);
+                animation_timer.Interval = TimeSpan.FromMilliseconds(frame_ms(0));
                 animation_timer.Start();
             }
         }
         else
         {
-            if (anim_name != "AnimMainIdle") { current_animation_name = "AnimMainIdle"; load_animation("AnimMainIdle"); start_idle_delay(); }
-            else
+            if (anim_name != "AnimMainIdle") { cur_animation_name = "AnimMainIdle"; load_animation("AnimMainIdle"); start_idle_delay(); }
+            else if (!is_error_shown)
             {
-                var box = new MessageBox("папка files/ не найдена\nили anims.txt пустой");
-                _ = box.ShowDialog(this);
+                is_error_shown = true;
+                Dispatcher.UIThread.Post(() => new MessageBox(localization.t("no_files")).Show());
             }
         }
     }
 
     private void animation_timer_tick(object? sender, EventArgs e)
     {
-        if (current_animation_frames.Count == 0 || animation_timer == null)
+        if (sheet == null || sheet.count == 0 || animation_timer == null)
         {
             animation_timer?.Stop();
-            if (current_animation_name != "AnimMainIdle") { load_animation("AnimMainIdle"); current_animation_name = "AnimMainIdle"; start_idle_delay(); }
+            if (cur_animation_name != "AnimMainIdle") { load_animation("AnimMainIdle"); cur_animation_name = "AnimMainIdle"; start_idle_delay(); }
             return;
         }
 
-        current_frame_index++;
+        cur_frame_index++;
 
-        if (current_animation_name == "AnimCharacterMoving" && is_mouse_down)
+        if (cur_animation_name == "AnimCharacterMoving" && is_mouse_down)
         {
-            if (current_frame_index >= current_animation_frames.Count) current_frame_index = 0;
+            if (cur_frame_index >= sheet.count) cur_frame_index = 0;
         }
-        else if (current_animation_name == current_music_loop && is_spotify_music_playing && is_music_listening_enabled && !is_in_afk_mode)
+        else if (cur_animation_name == cur_music_loop && is_music_playing && is_listening_enabled && !is_in_afk_mode)
         {
-            if (current_frame_index >= current_animation_frames.Count) current_frame_index = 0;
+            if (cur_frame_index >= sheet.count) cur_frame_index = 0;
         }
-        else if (current_animation_name == "AnimTyping" && is_typing_animation_active && !is_in_afk_mode && !is_write_mode_active)
+        else if (cur_animation_name == "AnimTyping" && typing_animation_active && !is_in_afk_mode && !write_mode_active)
         {
-            if (current_frame_index >= current_animation_frames.Count) current_frame_index = 0;
+            if (cur_frame_index >= sheet.count) cur_frame_index = 0;
         }
-        else if (current_animation_name == "AnimDragFileProcessing" && is_dragging_file && !is_in_afk_mode)
+        else if (cur_animation_name == "AnimDragFileProcessing" && is_dragging_file && !is_in_afk_mode)
         {
-            if (current_frame_index >= current_animation_frames.Count) current_frame_index = 0;
+            if (cur_frame_index >= sheet.count) cur_frame_index = 0;
         }
-        else if (current_animation_name == afk_loop_anim && is_in_afk_mode)
+        else if (cur_animation_name == afk_loop && is_in_afk_mode)
         {
-            if (current_frame_index >= current_animation_frames.Count) current_frame_index = 0;
+            if (cur_frame_index >= sheet.count) cur_frame_index = 0;
         }
-        else if (is_random_idle_sequence && !is_in_afk_mode && current_animation_name == current_idle_loop && idle_loop_counter < max_idle_loops)
+        else if (is_random_idle && !is_in_afk_mode && cur_animation_name == cur_idle_loop && idle_loop_counter < max_idle_loops)
         {
-            if (current_frame_index >= current_animation_frames.Count) { current_frame_index = 0; idle_loop_counter++; }
+            if (cur_frame_index >= sheet.count) { cur_frame_index = 0; idle_loop_counter++; }
         }
 
-        if (current_frame_index >= current_animation_frames.Count)
+        if (cur_frame_index >= sheet.count)
         {
             handle_animation_finish();
             return;
         }
 
-        var frame = current_animation_frames[current_frame_index];
-        hamster_img.Source = frame.image;
-        update_window_region(frame.image);
-        var new_interval = TimeSpan.FromMilliseconds(frame.duration > 0 ? frame.duration : 100);
+        show_frame(cur_frame_index);
+        var new_interval = TimeSpan.FromMilliseconds(frame_ms(cur_frame_index));
         if (animation_timer.Interval != new_interval)
         {
             animation_timer.Stop();
@@ -1100,178 +714,124 @@ public partial class MainWindow : Window
 
     private void handle_animation_finish()
     {
-        string prev_anim = current_animation_name;
+        string prev_anim = cur_animation_name;
         string next_anim = "AnimMainIdle";
         bool start_delay = false;
         animation_timer?.Stop();
 
-        if (is_write_mode_active && (prev_anim == "AnimTypingStart" || prev_anim == "AnimTyping" || prev_anim == "AnimTypingStop"))
+        if (write_mode_active && (prev_anim == "AnimTypingStart" || prev_anim == "AnimTyping" || prev_anim == "AnimTypingStop"))
         {
-            if (prev_anim == "AnimTypingStart") next_anim = "AnimTyping";
-            else if (prev_anim == "AnimTyping") next_anim = "AnimTypingStop";
-            else { is_write_mode_active = false; show_bubble(); start_delay = true; }
-        }
-        else if (prev_anim == "AnimScreenshotFinish")
-        {
-            if (is_screenshot_animation_active)
+            string[] chain = { "AnimTypingStart", "AnimTyping", "AnimTypingStop" };
+            string following = chain.Skip(Array.IndexOf(chain, prev_anim) + 1).FirstOrDefault(loaded_anim.ContainsKey) ?? "";
+            if (following != "") next_anim = following;
+            else
             {
-                _ = take_screenshot();
-                is_screenshot_animation_active = false;
-                if (is_spotify_music_playing && is_music_listening_enabled && loaded_animations.ContainsKey(current_music_loop)) next_anim = current_music_loop;
-                else if (is_typing_animation_active && loaded_animations.ContainsKey("AnimTyping")) next_anim = "AnimTyping";
+                write_mode_active = false;
+                typing_animation_active = false;
+                typing_session_start_time = DateTime.MinValue;
+                show_bubble();
+                if (is_music_playing && is_listening_enabled && loaded_anim.ContainsKey(cur_music_loop)) next_anim = cur_music_loop;
                 else start_delay = true;
             }
         }
-        else if (is_in_afk_mode) { next_anim = afk_loop_anim; }
-        else if (prev_anim == afk_finish_anim) { start_delay = true; }
-        else if (prev_anim == "AnimCharacterMoveStart") { if (is_mouse_down && loaded_animations.ContainsKey("AnimCharacterMoving")) next_anim = "AnimCharacterMoving"; else if (!is_mouse_down && loaded_animations.ContainsKey("AnimCharacterMoveFinish")) next_anim = "AnimCharacterMoveFinish"; else start_delay = true; }
-        else if (prev_anim == "AnimCharacterMoving") { if (!is_mouse_down && loaded_animations.ContainsKey("AnimCharacterMoveFinish")) next_anim = "AnimCharacterMoveFinish"; else if (is_mouse_down) next_anim = "AnimCharacterMoving"; else start_delay = true; }
+        else if (prev_anim == "AnimScreenshotFinish")
+        {
+            if (is_screenshot_anim_active)
+            {
+                _ = take_screenshot();
+                is_screenshot_anim_active = false;
+                if (is_music_playing && is_listening_enabled && loaded_anim.ContainsKey(cur_music_loop)) next_anim = cur_music_loop;
+                else if (typing_animation_active && loaded_anim.ContainsKey("AnimTyping")) next_anim = "AnimTyping";
+                else start_delay = true;
+            }
+        }
+        else if (is_in_afk_mode) { next_anim = afk_loop; }
+        else if (prev_anim == afk_finish) { start_delay = true; }
+        else if (prev_anim == "AnimCharacterMoveStart") { if (is_mouse_down && loaded_anim.ContainsKey("AnimCharacterMoving")) next_anim = "AnimCharacterMoving"; else if (!is_mouse_down && loaded_anim.ContainsKey("AnimCharacterMoveFinish")) next_anim = "AnimCharacterMoveFinish"; else start_delay = true; }
+        else if (prev_anim == "AnimCharacterMoving") { if (!is_mouse_down && loaded_anim.ContainsKey("AnimCharacterMoveFinish")) next_anim = "AnimCharacterMoveFinish"; else if (is_mouse_down) next_anim = "AnimCharacterMoving"; else start_delay = true; }
         else if (prev_anim == "AnimCharacterMoveFinish") { start_delay = true; }
-        else if (prev_anim == "AnimTypingStop") { is_typing_animation_active = false; typing_session_start_time = DateTime.MinValue; if (is_spotify_music_playing && is_music_listening_enabled && loaded_animations.ContainsKey(current_music_loop)) next_anim = current_music_loop; else if (is_dragging_file && loaded_animations.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else start_delay = true; }
-        else if (prev_anim == "AnimTypingStart") { if (is_typing_animation_active && loaded_animations.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else if (loaded_animations.ContainsKey("AnimTypingStop")) next_anim = "AnimTypingStop"; else { is_typing_animation_active = false; start_delay = true; } }
-        else if (prev_anim == "AnimDragFileStart") { if (is_dragging_file && loaded_animations.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else if (!is_dragging_file && loaded_animations.ContainsKey("AnimDragFileFinish")) next_anim = "AnimDragFileFinish"; else { is_dragging_file = false; start_delay = true; } }
-        else if (prev_anim == "AnimDragFileProcessing" || prev_anim == "AnimDragFileFinish") { is_dragging_file = false; if (is_spotify_music_playing && is_music_listening_enabled && loaded_animations.ContainsKey(current_music_loop)) next_anim = current_music_loop; else if (is_typing_animation_active && loaded_animations.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else start_delay = true; }
-        else if (prev_anim == current_music_start) { if (is_spotify_music_playing && is_music_listening_enabled && loaded_animations.ContainsKey(current_music_loop)) next_anim = current_music_loop; else if (loaded_animations.ContainsKey(current_music_finish)) next_anim = current_music_finish; else { is_spotify_music_playing = false; start_delay = true; } }
-        else if (prev_anim == current_music_finish) { is_spotify_music_playing = false; if (is_dragging_file && loaded_animations.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else if (is_typing_animation_active && loaded_animations.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else start_delay = true; }
-        else if (is_random_idle_sequence && prev_anim == current_idle_finish) { is_random_idle_sequence = false; current_idle_start = ""; current_idle_loop = ""; current_idle_finish = ""; idle_loop_counter = 0; if (is_spotify_music_playing && is_music_listening_enabled && loaded_animations.ContainsKey(current_music_loop)) next_anim = current_music_loop; else if (is_dragging_file && loaded_animations.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else if (is_typing_animation_active && loaded_animations.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else start_delay = true; }
-        else if (is_random_idle_sequence && prev_anim == current_idle_start) { if (loaded_animations.ContainsKey(current_idle_loop)) { next_anim = current_idle_loop; idle_loop_counter = 0; } else if (loaded_animations.ContainsKey(current_idle_finish)) { next_anim = current_idle_finish; idle_loop_counter = 0; } else { is_random_idle_sequence = false; start_delay = true; } }
-        else if (is_random_idle_sequence && prev_anim == current_idle_loop && idle_loop_counter >= max_idle_loops) { if (loaded_animations.ContainsKey(current_idle_finish)) next_anim = current_idle_finish; else { is_random_idle_sequence = false; start_delay = true; } }
-        else if (one_off_random_idle_animations.Contains(prev_anim)) { if (is_spotify_music_playing && is_music_listening_enabled && loaded_animations.ContainsKey(current_music_loop)) next_anim = current_music_loop; else if (is_dragging_file && loaded_animations.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else if (is_typing_animation_active && loaded_animations.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else start_delay = true; }
-        else { if (is_spotify_music_playing && is_music_listening_enabled && loaded_animations.ContainsKey(current_music_loop)) next_anim = current_music_loop; else if (is_dragging_file && loaded_animations.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else if (is_typing_animation_active && loaded_animations.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else if (is_random_idle_sequence) { is_random_idle_sequence = false; start_delay = true; } else start_delay = true; }
+        else if (prev_anim == "AnimTypingStop") { typing_animation_active = false; typing_session_start_time = DateTime.MinValue; if (is_music_playing && is_listening_enabled && loaded_anim.ContainsKey(cur_music_loop)) next_anim = cur_music_loop; else if (is_dragging_file && loaded_anim.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else start_delay = true; }
+        else if (prev_anim == "AnimTypingStart") { if (typing_animation_active && loaded_anim.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else if (loaded_anim.ContainsKey("AnimTypingStop")) next_anim = "AnimTypingStop"; else { typing_animation_active = false; start_delay = true; } }
+        else if (prev_anim == "AnimDragFileStart") { if (is_dragging_file && loaded_anim.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else if (!is_dragging_file && loaded_anim.ContainsKey("AnimDragFileFinish")) next_anim = "AnimDragFileFinish"; else { is_dragging_file = false; start_delay = true; } }
+        else if (prev_anim == "AnimDragFileProcessing" || prev_anim == "AnimDragFileFinish") { is_dragging_file = false; if (is_music_playing && is_listening_enabled && loaded_anim.ContainsKey(cur_music_loop)) next_anim = cur_music_loop; else if (typing_animation_active && loaded_anim.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else start_delay = true; }
+        else if (prev_anim == cur_music_start) { if (is_music_playing && is_listening_enabled && loaded_anim.ContainsKey(cur_music_loop)) next_anim = cur_music_loop; else if (loaded_anim.ContainsKey(cur_music_finish)) next_anim = cur_music_finish; else { is_music_playing = false; start_delay = true; } }
+        else if (prev_anim == cur_music_finish) { is_music_playing = false; if (is_dragging_file && loaded_anim.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else if (typing_animation_active && loaded_anim.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else start_delay = true; }
+        else if (is_random_idle && prev_anim == cur_idle_finish) { is_random_idle = false; cur_idle_start = ""; cur_idle_loop = ""; cur_idle_finish = ""; idle_loop_counter = 0; if (is_music_playing && is_listening_enabled && loaded_anim.ContainsKey(cur_music_loop)) next_anim = cur_music_loop; else if (is_dragging_file && loaded_anim.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else if (typing_animation_active && loaded_anim.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else start_delay = true; }
+        else if (is_random_idle && prev_anim == cur_idle_start) { if (loaded_anim.ContainsKey(cur_idle_loop)) { next_anim = cur_idle_loop; idle_loop_counter = 0; } else if (loaded_anim.ContainsKey(cur_idle_finish)) { next_anim = cur_idle_finish; idle_loop_counter = 0; } else { is_random_idle = false; start_delay = true; } }
+        else if (is_random_idle && prev_anim == cur_idle_loop && idle_loop_counter >= max_idle_loops) { if (loaded_anim.ContainsKey(cur_idle_finish)) next_anim = cur_idle_finish; else { is_random_idle = false; start_delay = true; } }
+        else if (one_off_random_idle_animations.Contains(prev_anim)) { if (is_music_playing && is_listening_enabled && loaded_anim.ContainsKey(cur_music_loop)) next_anim = cur_music_loop; else if (is_dragging_file && loaded_anim.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else if (typing_animation_active && loaded_anim.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else start_delay = true; }
+        else { if (is_music_playing && is_listening_enabled && loaded_anim.ContainsKey(cur_music_loop)) next_anim = cur_music_loop; else if (is_dragging_file && loaded_anim.ContainsKey("AnimDragFileProcessing")) next_anim = "AnimDragFileProcessing"; else if (typing_animation_active && loaded_anim.ContainsKey("AnimTyping")) next_anim = "AnimTyping"; else if (is_random_idle) { is_random_idle = false; start_delay = true; } else start_delay = true; }
 
-        if (start_delay && !is_in_afk_mode && !is_screenshot_animation_active)
+        if (start_delay && !is_in_afk_mode && !is_screenshot_anim_active)
         {
             animation_timer?.Stop();
-            current_animation_name = "AnimMainIdle";
-            if (loaded_animations.TryGetValue("AnimMainIdle", out var idle_frames) && idle_frames.Count > 0)
+            cur_animation_name = "AnimMainIdle";
+            var idle_sheet = loaded_anim.get("AnimMainIdle");
+            if (idle_sheet != null && idle_sheet.count > 0)
             {
-                current_animation_frames = idle_frames;
-                current_frame_index = 0;
-                hamster_img.Source = idle_frames[0].image;
-                update_window_region(idle_frames[0].image);
+                sheet = idle_sheet;
+                fit_window();
+                show_frame(0);
             }
             start_idle_delay();
         }
-        else { load_animation(next_anim); current_animation_name = next_anim; }
+        else { load_animation(next_anim); cur_animation_name = next_anim; }
 
-        is_character_dragging_animation = current_animation_name == "AnimCharacterMoveStart" || current_animation_name == "AnimCharacterMoving" || current_animation_name == "AnimCharacterMoveFinish";
-        is_random_idle_sequence = !is_in_afk_mode && (current_animation_name.StartsWith("AnimIdleStart") || current_animation_name.StartsWith("AnimIdleLoop") || current_animation_name.StartsWith("AnimIdleFinish"));
-        is_typing_animation_active = current_animation_name == "AnimTypingStart" || current_animation_name == "AnimTyping" || current_animation_name == "AnimTypingStop";
-        is_screenshot_animation_active = current_animation_name == "AnimScreenshotFinish";
+        is_chomik_dragging_animation = cur_animation_name == "AnimCharacterMoveStart" || cur_animation_name == "AnimCharacterMoving" || cur_animation_name == "AnimCharacterMoveFinish";
+        is_random_idle = !is_in_afk_mode && (cur_animation_name.StartsWith("AnimIdleStart") || cur_animation_name.StartsWith("AnimIdleLoop") || cur_animation_name.StartsWith("AnimIdleFinish"));
+        typing_animation_active = cur_animation_name == "AnimTypingStart" || cur_animation_name == "AnimTyping" || cur_animation_name == "AnimTypingStop";
+        is_screenshot_anim_active = cur_animation_name == "AnimScreenshotFinish";
     }
 
     private void start_idle_delay()
     {
-        if (is_in_afk_mode || is_character_dragging_animation || is_dragging_file || is_typing_animation_active || is_spotify_music_playing || is_screenshot_animation_active || is_write_mode_active) { idle_delay_timer?.Stop(); return; }
-        if (idle_delay_timer != null) { idle_delay_timer.Stop(); double max_ms = Math.Max(1500, idle_delay_seconds * 1000); idle_delay_timer.Interval = TimeSpan.FromMilliseconds(1000 + rnd.NextDouble() * (max_ms - 1000)); idle_delay_timer.Start(); }
+        if (is_in_afk_mode || is_chomik_dragging_animation || is_dragging_file || typing_animation_active || is_music_playing || is_screenshot_anim_active || write_mode_active) { idle_delay_timer?.Stop(); return; }
+        if (idle_delay_timer != null) { idle_delay_timer.Stop(); double max_ms = Math.Max(1500, idle_delay * 1000); idle_delay_timer.Interval = TimeSpan.FromMilliseconds(1000 + rnd.NextDouble() * (max_ms - 1000)); idle_delay_timer.Start(); }
     }
 
     private void idle_delay_timer_tick(object? sender, EventArgs e)
     {
         idle_delay_timer?.Stop();
-        if (is_in_afk_mode || is_character_dragging_animation || is_dragging_file || is_typing_animation_active || is_spotify_music_playing || is_screenshot_animation_active) return;
+        if (is_in_afk_mode || is_chomik_dragging_animation || is_dragging_file || typing_animation_active || is_music_playing || is_screenshot_anim_active) return;
         string next_anim = "AnimMainIdle";
 
-        if (rnd.Next(100) < 20 && one_off_random_idle_animations.Any(a => loaded_animations.ContainsKey(a)))
+        if (rnd.Next(100) < 20 && one_off_random_idle_animations.Any(a => loaded_anim.ContainsKey(a)))
         {
-            var avail = one_off_random_idle_animations.Where(a => loaded_animations.ContainsKey(a)).ToList();
+            var avail = one_off_random_idle_animations.Where(a => loaded_anim.ContainsKey(a)).ToList();
             if (avail.Count > 0) next_anim = avail[rnd.Next(avail.Count)];
         }
         else if (rnd.Next(100) < 10)
         {
-            var avail = loaded_animations.Keys.Where(k => k.StartsWith("AnimIdleStart") && k != afk_start_anim).ToList();
+            var avail = loaded_anim.Keys.Where(k => k.StartsWith("AnimIdleStart") && k != afk_start).ToList();
             if (avail.Count > 0)
             {
-                current_idle_start = avail[rnd.Next(avail.Count)];
-                if (int.TryParse(current_idle_start.Replace("AnimIdleStart", ""), out int num))
+                cur_idle_start = avail[rnd.Next(avail.Count)];
+                if (int.TryParse(cur_idle_start.Replace("AnimIdleStart", ""), out int num))
                 {
-                    current_idle_loop = $"AnimIdleLoop{num}";
-                    current_idle_finish = $"AnimIdleFinish{num}";
-                    if (loaded_animations.ContainsKey(current_idle_start)) { next_anim = current_idle_start; is_random_idle_sequence = true; idle_loop_counter = 0; }
-                    else if (loaded_animations.ContainsKey(current_idle_loop)) { next_anim = current_idle_loop; is_random_idle_sequence = true; idle_loop_counter = 0; }
-                    else if (loaded_animations.ContainsKey(current_idle_finish)) { next_anim = current_idle_finish; is_random_idle_sequence = true; idle_loop_counter = 0; }
+                    cur_idle_loop = $"AnimIdleLoop{num}";
+                    cur_idle_finish = $"AnimIdleFinish{num}";
+                    if (loaded_anim.ContainsKey(cur_idle_start)) { next_anim = cur_idle_start; is_random_idle = true; idle_loop_counter = 0; }
+                    else if (loaded_anim.ContainsKey(cur_idle_loop)) { next_anim = cur_idle_loop; is_random_idle = true; idle_loop_counter = 0; }
+                    else if (loaded_anim.ContainsKey(cur_idle_finish)) { next_anim = cur_idle_finish; is_random_idle = true; idle_loop_counter = 0; }
                 }
             }
         }
         animation_timer?.Stop();
         load_animation(next_anim);
-        current_animation_name = next_anim;
-        is_random_idle_sequence = !is_in_afk_mode && (current_animation_name.StartsWith("AnimIdleStart") || current_animation_name.StartsWith("AnimIdleLoop") || current_animation_name.StartsWith("AnimIdleFinish"));
+        cur_animation_name = next_anim;
+        is_random_idle = !is_in_afk_mode && (cur_animation_name.StartsWith("AnimIdleStart") || cur_animation_name.StartsWith("AnimIdleLoop") || cur_animation_name.StartsWith("AnimIdleFinish"));
         if (next_anim == "AnimMainIdle") start_idle_delay();
-    }
-
-    private unsafe byte[] get_alpha_data(Bitmap bmp)
-    {
-        if (alpha_cache.TryGetValue(bmp, out var cached)) return cached;
-        int w = bmp.PixelSize.Width, h = bmp.PixelSize.Height;
-        var buf = new byte[w * h];
-        var pixels = new byte[w * h * 4];
-        fixed (byte* p_pixels = pixels)
-        {
-            bmp.CopyPixels(new PixelRect(0, 0, w, h), (IntPtr)p_pixels, pixels.Length, w * 4);
-        }
-        for (int i = 0; i < w * h; i++) buf[i] = pixels[i * 4 + 3];
-        alpha_cache[bmp] = buf;
-        return buf;
-    }
-
-    private bool is_pixel_opaque(Bitmap bmp, int x, int y)
-    {
-        if (x < 0 || y < 0 || x >= bmp.PixelSize.Width || y >= bmp.PixelSize.Height) return false;
-        return get_alpha_data(bmp)[y * bmp.PixelSize.Width + x] > 10;
-    }
-
-    private void update_window_region(Bitmap? bmp)
-    {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
-        var hwnd = TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
-        if (hwnd == IntPtr.Zero) return;
-        if (bmp == null) { SetWindowRgn(hwnd, IntPtr.Zero, false); return; }
-
-        try
-        {
-            var alpha = get_alpha_data(bmp);
-            int w = bmp.PixelSize.Width;
-            int h = bmp.PixelSize.Height;
-            var region = CreateRectRgn(0, 0, 0, 0);
-            for (int y = 0; y < h; y++)
-            {
-                int x = 0;
-                while (x < w)
-                {
-                    while (x < w && alpha[y * w + x] <= 10) x++;
-                    if (x >= w) break;
-                    int start = x;
-                    while (x < w && alpha[y * w + x] > 10) x++;
-                    var row = CreateRectRgn(start, y, x, y + 1);
-                    CombineRgn(region, region, row, rgn_or);
-                    DeleteObject(row);
-                }
-            }
-            SetWindowRgn(hwnd, region, false);
-        }
-        catch { }
     }
 
     private void on_context_requested(object? sender, ContextRequestedEventArgs e)
     {
-        if (e.TryGetPosition(this, out var pos))
-        {
-            var frame = current_animation_frames.Count > 0
-                ? current_animation_frames[current_frame_index < current_animation_frames.Count ? current_frame_index : 0]
-                : null;
-            if (frame?.image == null || !is_pixel_opaque(frame.image, (int)pos.X, (int)pos.Y))
-                e.Handled = true;
-        }
+        if (e.TryGetPosition(this, out var pos) && !is_opaque(pos.X, pos.Y)) e.Handled = true;
     }
 
     private void on_pointer_pressed(object? sender, PointerPressedEventArgs e)
     {
         var local_pos = e.GetPosition(this);
-        var frame = current_animation_frames.Count > 0 ? current_animation_frames[current_frame_index < current_animation_frames.Count ? current_frame_index : 0] : null;
-        bool on_transparent = frame?.image == null || !is_pixel_opaque(frame.image, (int)local_pos.X, (int)local_pos.Y);
-
-        if (on_transparent)
+        if (!is_opaque(local_pos.X, local_pos.Y))
         {
             e.Handled = true;
             return;
@@ -1284,11 +844,11 @@ public partial class MainWindow : Window
             is_mouse_down = true;
             update_user_activity();
             idle_delay_timer?.Stop();
-            if (!is_in_afk_mode && !is_spotify_music_playing && !is_typing_animation_active && !is_dragging_file && !is_screenshot_animation_active && !is_write_mode_active && !uninterruptible_animations.Contains(current_animation_name) && !current_animation_name.StartsWith("AnimCharacterMove"))
+            if (!is_in_afk_mode && !is_music_playing && !typing_animation_active && !is_dragging_file && !is_screenshot_anim_active && !write_mode_active && !inf_animations.Contains(cur_animation_name) && !cur_animation_name.StartsWith("AnimCharacterMove"))
             {
                 animation_timer?.Stop();
-                if (loaded_animations.ContainsKey("AnimCharacterMoveStart")) { load_animation("AnimCharacterMoveStart"); current_animation_name = "AnimCharacterMoveStart"; }
-                else if (loaded_animations.ContainsKey("AnimCharacterMoving")) { load_animation("AnimCharacterMoving"); current_animation_name = "AnimCharacterMoving"; }
+                if (loaded_anim.ContainsKey("AnimCharacterMoveStart")) { load_animation("AnimCharacterMoveStart"); cur_animation_name = "AnimCharacterMoveStart"; }
+                else if (loaded_anim.ContainsKey("AnimCharacterMoving")) { load_animation("AnimCharacterMoving"); cur_animation_name = "AnimCharacterMoving"; }
             }
         }
     }
@@ -1302,12 +862,12 @@ public partial class MainWindow : Window
 
             var screen_pos = this.PointToScreen(e.GetPosition(this));
             this.Position = new PixelPoint((int)(screen_pos.X + mouse_offset.X), (int)(screen_pos.Y + mouse_offset.Y));
-            if (!is_in_afk_mode && !is_dragging_file && !is_spotify_music_playing && !is_typing_animation_active && !is_screenshot_animation_active && !is_write_mode_active && current_animation_name != "AnimCharacterMoveStart" && current_animation_name != "AnimCharacterMoving" && current_animation_name != "AnimCharacterMoveFinish" && loaded_animations.ContainsKey("AnimCharacterMoving"))
+            if (!is_in_afk_mode && !is_dragging_file && !is_music_playing && !typing_animation_active && !is_screenshot_anim_active && !write_mode_active && cur_animation_name != "AnimCharacterMoveStart" && cur_animation_name != "AnimCharacterMoving" && cur_animation_name != "AnimCharacterMoveFinish" && loaded_anim.ContainsKey("AnimCharacterMoving"))
             {
                 idle_delay_timer?.Stop();
                 animation_timer?.Stop();
                 load_animation("AnimCharacterMoving");
-                current_animation_name = "AnimCharacterMoving";
+                cur_animation_name = "AnimCharacterMoving";
             }
         }
     }
@@ -1318,9 +878,9 @@ public partial class MainWindow : Window
         {
             is_mouse_down = false;
             update_user_activity();
-            if (!is_in_afk_mode && is_character_dragging_animation)
+            if (!is_in_afk_mode && is_chomik_dragging_animation)
             {
-                if (loaded_animations.ContainsKey("AnimCharacterMoveFinish")) { animation_timer?.Stop(); load_animation("AnimCharacterMoveFinish"); current_animation_name = "AnimCharacterMoveFinish"; }
+                if (loaded_anim.ContainsKey("AnimCharacterMoveFinish")) { animation_timer?.Stop(); load_animation("AnimCharacterMoveFinish"); cur_animation_name = "AnimCharacterMoveFinish"; }
                 else handle_animation_finish();
             }
         }
@@ -1328,16 +888,16 @@ public partial class MainWindow : Window
 
     private void on_drag_enter(object? sender, DragEventArgs e)
     {
-        if (is_in_afk_mode || is_dragging_file || is_screenshot_animation_active || is_write_mode_active) { e.DragEffects = DragDropEffects.None; return; }
+        if (is_in_afk_mode || is_dragging_file || is_screenshot_anim_active || write_mode_active) { e.DragEffects = DragDropEffects.None; return; }
         e.DragEffects = DragDropEffects.Copy;
-        if (is_character_dragging_animation) is_mouse_down = false;
-        if (!is_spotify_music_playing && !current_animation_name.StartsWith("AnimDragFile"))
+        if (is_chomik_dragging_animation) is_mouse_down = false;
+        if (!is_music_playing && !cur_animation_name.StartsWith("AnimDragFile"))
         {
             is_dragging_file = true;
             idle_delay_timer?.Stop();
             animation_timer?.Stop();
-            if (loaded_animations.ContainsKey("AnimDragFileStart")) { load_animation("AnimDragFileStart"); current_animation_name = "AnimDragFileStart"; }
-            else if (loaded_animations.ContainsKey("AnimDragFileProcessing")) { load_animation("AnimDragFileProcessing"); current_animation_name = "AnimDragFileProcessing"; }
+            if (loaded_anim.ContainsKey("AnimDragFileStart")) { load_animation("AnimDragFileStart"); cur_animation_name = "AnimDragFileStart"; }
+            else if (loaded_anim.ContainsKey("AnimDragFileProcessing")) { load_animation("AnimDragFileProcessing"); cur_animation_name = "AnimDragFileProcessing"; }
         }
     }
 
@@ -1355,7 +915,7 @@ public partial class MainWindow : Window
                         try
                         {
                             string path = f.Path.LocalPath;
-                            if (permanent_delete)
+                            if (perm_delete)
                             {
                                 if (File.Exists(path)) File.Delete(path);
                                 else if (Directory.Exists(path)) Directory.Delete(path, true);
@@ -1375,7 +935,7 @@ public partial class MainWindow : Window
                 }
             }
 
-            if (loaded_animations.ContainsKey("AnimDragFileFinish")) { animation_timer?.Stop(); load_animation("AnimDragFileFinish"); current_animation_name = "AnimDragFileFinish"; }
+            if (loaded_anim.ContainsKey("AnimDragFileFinish")) { animation_timer?.Stop(); load_animation("AnimDragFileFinish"); cur_animation_name = "AnimDragFileFinish"; }
             else handle_animation_finish();
         }
     }
@@ -1428,8 +988,8 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && hook_id != IntPtr.Zero)
-            UnhookWindowsHookEx(hook_id);
+        if (OperatingSystem.IsWindows() && hook_id != IntPtr.Zero)
+            win.UnhookWindowsHookEx(hook_id);
         base.OnClosed(e);
     }
 }

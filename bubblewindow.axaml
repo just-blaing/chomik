@@ -6,6 +6,7 @@
         SystemDecorations="None"
         Topmost="True"
         ShowInTaskbar="False"
+        ShowActivated="False"
         SizeToContent="WidthAndHeight"
         IsHitTestVisible="False">
     <Grid RowDefinitions="Auto,9">

@@ -46,5 +46,7 @@
 ## авторы
 
 автор: blaing
+
 спрайты чомика: chomikuj.pl
+
 сделано на [Avalonia](https://avaloniaui.net)

@@ -45,5 +45,7 @@ since the application has been ported to each os:
 ## credits
 
 author: blaing
+
 chomik sprites: chomikuj.pl
+
 built with [Avalonia](https://avaloniaui.net)

@@ -2,7 +2,7 @@
 
 <img src="assets/chomik_music.gif" width="200" alt="chomik listening to music">
 
-[русская версия](README.ru.md)
+[(русская версия readme)](README.ru.md)
 
 ## what he does
 

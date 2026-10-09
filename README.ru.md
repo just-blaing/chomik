@@ -31,7 +31,6 @@
 
 | система | команда |
 |---|---|
-|---|---|
 | windows 64-бит | dotnet publish -c Release -r win-x64 -o out/win-x64 |
 | windows 32-бит | dotnet publish -c Release -r win-x86 -o out/win-x86 |
 | linux (x64) | dotnet publish -c Release -r linux-x64 -o out/linux-x64 |
